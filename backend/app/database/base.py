@@ -43,3 +43,77 @@ class DatabaseInterface(ABC):
     @abstractmethod
     async def initialize_sample_data(self):
         pass
+    @abstractmethod
+    async def get_all_customers(self) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_all_products(self) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_recent_orders(self, limit: int = 10) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def execute_dynamic_query(self, table: str, fields: List[str], filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def get_least_sold_products(self, limit: int = 5) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_repeat_customers(self) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_all_time_revenue(self) -> float:
+        pass
+    
+    @abstractmethod
+    async def get_inactive_customers(self, days_threshold: int = 30) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_peak_revenue_month(self, year: int = None) -> Dict[str, Any]:
+        pass
+    
+    @abstractmethod
+    async def get_customer_product_preferences(self) -> List[Dict[str, Any]]:
+        pass    
+    @abstractmethod
+    async def get_all_time_revenue(self) -> float:
+        pass
+    
+    @abstractmethod
+    async def get_peak_revenue_month(self, year: int = None) -> Dict[str, Any]:
+        pass
+    
+    @abstractmethod
+    async def get_repeat_customers(self) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_least_sold_products(self, limit: int = 5) -> List[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    async def get_inactive_customers(self, days_threshold: int = 30) -> List[Dict[str, Any]]:
+        pass   
+        
+    @abstractmethod
+    async def get_costliest_product(self) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def get_cheapest_product(self) -> List[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    async def get_product_price_range(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def get_average_product_price(self) -> float:
+        pass     

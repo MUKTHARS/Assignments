@@ -69,49 +69,6 @@ class AnalyticsService:
                 "data": None,
                 "response": f"Sorry, I encountered an error while processing your query: {error_msg}"
             }
-        """Process natural language query and return results"""
-        
-        if not self.db:
-            await self.initialize_database()
-        
-        # Parse the natural language query
-        parsed_intent = self.llm_service.parse_natural_language(query)
-        
-        if parsed_intent["intent"] == "unknown":
-            return {
-                "success": False,
-                "error": "I couldn't understand your query. Please try rephrasing it.",
-                "data": None,
-                "response": "I couldn't understand your query. Please try rephrasing it."
-            }
-        
-        try:
-            # Execute the appropriate function based on intent
-            data = await self._execute_analytics_function(
-                parsed_intent["intent"], 
-                parsed_intent["parameters"]
-            )
-            
-            # Generate natural language response
-            natural_response = await self.llm_service.generate_natural_response(
-                data, query
-            )
-            
-            return {
-                "success": True,
-                "intent": parsed_intent["intent"],
-                "parameters": parsed_intent["parameters"],
-                "data": data,
-                "response": natural_response
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "data": None,
-                "response": f"Sorry, I encountered an error while processing your query: {str(e)}"
-            }
 
     async def _execute_analytics_function(self, intent: str, parameters: Dict[str, Any]) -> Any:
         """Execute the appropriate analytics function"""
@@ -119,10 +76,17 @@ class AnalyticsService:
         # Handle date parameters
         processed_params = self._process_parameters(parameters)
         
-        if intent == "get_weekly_revenue":
-            return await self.db.get_weekly_revenue(
-                processed_params["start_date"],
-                processed_params["end_date"]
+        if intent == "execute_dynamic_query":
+            # Extract dynamic query parameters
+            return await self.db.execute_dynamic_query(
+                table=processed_params.get("table", "customers"),
+                fields=processed_params.get("fields", ["*"]),
+                filters=processed_params.get("filters", {}),
+                sort_by=processed_params.get("sort_by"),
+                sort_order=processed_params.get("sort_order", "desc"),
+                limit=processed_params.get("limit", 50),
+                query_type=processed_params.get("query_type", "general"),
+                operation=processed_params.get("operation", "get")
             )
             
         elif intent == "get_daily_sales":
@@ -150,6 +114,61 @@ class AnalyticsService:
             return await self.db.get_monthly_revenue_trend(
                 processed_params.get("months", 6)
             )
+        
+        elif intent == "get_all_customers":
+            return await self.db.get_all_customers()
+            
+        elif intent == "get_all_products":
+            return await self.db.get_all_products()
+            
+        elif intent == "get_recent_orders":
+            return await self.db.get_recent_orders(
+                processed_params.get("limit", 10)
+            )
+            
+        elif intent == "execute_custom_query":
+            # For completely dynamic queries
+            return await self.db.execute_dynamic_query(
+                processed_params.get("table", "customers"),
+                processed_params.get("fields", ["*"]),
+                processed_params.get("filters", {})
+            )
+
+        elif intent == "get_least_sold_products":
+            return await self.db.get_least_sold_products(
+                processed_params.get("limit", 5)
+            )
+            
+        elif intent == "get_repeat_customers":
+            return await self.db.get_repeat_customers()
+            
+        elif intent == "get_all_time_revenue":
+            return await self.db.get_all_time_revenue()
+            
+        elif intent == "get_inactive_customers":
+            return await self.db.get_inactive_customers(
+                processed_params.get("days_threshold", 30)
+            )
+            
+        elif intent == "get_peak_revenue_month":
+            return await self.db.get_peak_revenue_month(
+                processed_params.get("year")
+            )
+            
+        elif intent == "get_customer_product_preferences":
+            return await self.db.get_customer_product_preferences()
+            
+        elif intent == "get_costliest_product":
+            return await self.db.get_costliest_product()
+    
+        elif intent == "get_cheapest_product":
+            return await self.db.get_cheapest_product()
+    
+        elif intent == "get_product_price_range":
+            return await self.db.get_product_price_range()
+    
+        elif intent == "get_average_product_price":
+            return await self.db.get_average_product_price()
         
         else:
             raise ValueError(f"Unknown intent: {intent}")
@@ -204,29 +223,6 @@ class AnalyticsService:
                     processed[key] = today
         
         return processed
-        """Process and validate parameters"""
-        processed = parameters.copy()
-        
-        # Handle date calculations
-        if "start_date" in parameters and parameters["start_date"] == "this_week":
-            today = date.today()
-            start_of_week = today - timedelta(days=today.weekday())
-            processed["start_date"] = start_of_week
-            processed["end_date"] = start_of_week + timedelta(days=6)
-        
-        elif "start_date" in parameters and parameters["start_date"] == "last_week":
-            today = date.today()
-            start_of_last_week = today - timedelta(days=today.weekday() + 7)
-            processed["start_date"] = start_of_last_week
-            processed["end_date"] = start_of_last_week + timedelta(days=6)
-        
-        elif "target_date" in parameters and parameters["target_date"] == "today":
-            processed["target_date"] = date.today()
-        
-        elif "target_date" in parameters and parameters["target_date"] == "yesterday":
-            processed["target_date"] = date.today() - timedelta(days=1)
-        
-        return processed
 
     def _serialize_data(self, data: Any) -> Any:
         """Convert non-serializable objects to strings for JSON response"""
@@ -261,4 +257,4 @@ class AnalyticsService:
                 
         except Exception as e:
             print(f"Serialization error: {e}")
-            return str(data)    
+            return str(data)

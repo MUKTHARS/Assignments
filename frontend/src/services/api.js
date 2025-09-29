@@ -15,13 +15,25 @@ export const processQuery = async (query) => {
 };
 
 export const getHealth = async () => {
-  const response = await api.get('/health');
-  return response.data;
+  // Try both endpoints for compatibility
+  try {
+    const response = await api.get('/health');
+    return response.data;
+  } catch (error) {
+    // Fallback to root health check
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/health');
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (fallbackError) {
+      console.error('Health check failed:', fallbackError);
+    }
+    throw error;
+  }
 };
 
 export const updateDatabaseConfig = async (config) => {
-  // Note: In a real application, you'd have an endpoint for this
-  // For now, we'll simulate by showing a message
   console.log('Database config update requested:', config);
   return new Promise((resolve) => {
     setTimeout(() => {

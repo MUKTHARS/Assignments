@@ -39,3 +39,10 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs"
     }
+
+# Add health redirect to fix 404
+@app.get("/health")
+async def health_redirect():
+    """Redirect to the actual health endpoint"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/v1/health")
