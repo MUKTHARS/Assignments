@@ -68,6 +68,8 @@ class PostgresDB(DatabaseInterface):
         if self.engine:
             self.engine.dispose()
 
+           
+
     async def get_weekly_revenue(self, start_date: date, end_date: date) -> float:
         with self.engine.connect() as conn:
             result = conn.execute(
@@ -188,6 +190,14 @@ class PostgresDB(DatabaseInterface):
                 return [dict(zip(columns, row)) for row in result]
         except Exception as e:
             raise Exception(f"Query execution error: {str(e)}")
+        async def create_tables(self):
+            """Create all tables if they don't exist"""
+            try:
+                self.metadata.create_all(bind=self.engine)
+                print("✅ PostgreSQL tables created successfully")
+            except Exception as e:
+                print(f"❌ Error creating tables: {e}")
+                raise
 
     async def initialize_sample_data(self):
         """Initialize sample data for testing"""

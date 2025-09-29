@@ -94,7 +94,7 @@ const DatabaseConfig = ({ onConfigUpdate }) => {
             onChange={(e) => setConfig({...config, connection_url: e.target.value})}
             placeholder={
               config.database_type === 'postgres' 
-                ? 'postgresql://user:password@localhost:5432/shopping_db'
+                ? 'postgresql://postgres:user@localhost:5432/shopping_db'
                 : 'mongodb://localhost:27017/shopping_db'
             }
             required

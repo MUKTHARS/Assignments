@@ -24,4 +24,6 @@ class DatabaseFactory:
     
     @staticmethod
     async def initialize_sample_data(db: DatabaseInterface):
+        print("🔄 Initializing sample data...")
         await db.initialize_sample_data()
+        print("✅ Sample data initialization completed")
