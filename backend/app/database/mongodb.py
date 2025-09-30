@@ -147,6 +147,11 @@ class MongoDB(DatabaseInterface):
 
         print("✅ MongoDB sample data initialization completed")
 
+
+
+
+
+
     async def get_weekly_revenue(self, start_date: date, end_date: date) -> float:
         try:
             pipeline = [
@@ -179,8 +184,7 @@ class MongoDB(DatabaseInterface):
             pipeline = [
                 {
                     "$match": {
-                        "order_date": target_date.isoformat(),
-                        "status": "completed"
+                        "order_date": target_date.isoformat()
                     }
                 },
                 {
@@ -209,7 +213,6 @@ class MongoDB(DatabaseInterface):
                         "total_amount": 1,
                         "status": 1,
                         "item_count": 1,
-                        "order_date": 1,
                         "_id": 0
                     }
                 }
@@ -223,14 +226,11 @@ class MongoDB(DatabaseInterface):
             print(f"❌ Error in get_daily_sales: {e}")
             return []
 
+
+
     async def get_top_products(self, limit: int = 10) -> List[Dict[str, Any]]:
         try:
             pipeline = [
-                {
-                    "$match": {
-                        "status": "completed"
-                    }
-                },
                 {
                     "$unwind": "$items"
                 },
@@ -247,11 +247,9 @@ class MongoDB(DatabaseInterface):
                 },
                 {
                     "$group": {
-                        "_id": {
-                            "product_id": "$items.product_id",
-                            "name": "$product.name",
-                            "category": "$product.category"
-                        },
+                        "_id": "$product.name",
+                        "name": {"$first": "$product.name"},
+                        "category": {"$first": "$product.category"},
                         "total_sold": {"$sum": "$items.quantity"},
                         "total_revenue": {
                             "$sum": {
@@ -262,8 +260,8 @@ class MongoDB(DatabaseInterface):
                 },
                 {
                     "$project": {
-                        "name": "$_id.name",
-                        "category": "$_id.category",
+                        "name": 1,
+                        "category": 1,
                         "total_sold": 1,
                         "total_revenue": 1,
                         "_id": 0
@@ -290,8 +288,7 @@ class MongoDB(DatabaseInterface):
             pipeline = [
                 {
                     "$match": {
-                        "customer_id": customer_id,
-                        "status": "completed"
+                        "customer_id": customer_id
                     }
                 },
                 {
@@ -328,6 +325,8 @@ class MongoDB(DatabaseInterface):
             print(f"❌ Error in get_customer_orders: {e}")
             return []
 
+    
+
     async def get_sales_by_category(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         try:
             pipeline = [
@@ -336,8 +335,7 @@ class MongoDB(DatabaseInterface):
                         "order_date": {
                             "$gte": start_date.isoformat(),
                             "$lte": end_date.isoformat()
-                        },
-                        "status": "completed"
+                        }
                     }
                 },
                 {
@@ -387,7 +385,29 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error in get_sales_by_category: {e}")
             return []
-
+    async def debug_data_structure(self):
+        """Debug method to check data structure"""
+        try:
+            # Check orders structure
+            sample_order = await self.db.orders.find_one()
+            print(f"📋 Sample order structure: {list(sample_order.keys()) if sample_order else 'No orders'}")
+            if sample_order and 'items' in sample_order:
+                print(f"📦 Sample items: {sample_order['items'][:2] if sample_order['items'] else 'No items'}")
+            
+            # Check products structure
+            sample_product = await self.db.products.find_one()
+            print(f"📋 Sample product structure: {list(sample_product.keys()) if sample_product else 'No products'}")
+            
+            # Count documents
+            orders_count = await self.db.orders.count_documents({})
+            products_count = await self.db.products.count_documents({})
+            print(f"📊 Counts - Orders: {orders_count}, Products: {products_count}")
+            
+        except Exception as e:
+            print(f"❌ Debug error: {e}")
+    
+    
+    
     async def get_monthly_revenue_trend(self, months: int = 6) -> List[Dict[str, Any]]:
         try:
             end_date = date.today()
@@ -399,16 +419,14 @@ class MongoDB(DatabaseInterface):
                         "order_date": {
                             "$gte": start_date.isoformat(),
                             "$lte": end_date.isoformat()
-                        },
-                        "status": "completed"
+                        }
                     }
                 },
                 {
                     "$addFields": {
                         "order_date_parsed": {
                             "$dateFromString": {
-                                "dateString": "$order_date",
-                                "format": "%Y-%m-%d"
+                                "dateString": "$order_date"
                             }
                         }
                     }
@@ -449,7 +467,8 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error in get_monthly_revenue_trend: {e}")
             return []
-
+    
+    
     async def get_all_time_revenue(self) -> float:
         try:
             pipeline = [
@@ -633,6 +652,10 @@ class MongoDB(DatabaseInterface):
         
         await self.db.orders.insert_many(orders)
         await self.db.order_items.insert_many(order_items)
+
+
+
+
 
     async def execute_dynamic_query(self, table: str, fields: List[str], filters: Dict[str, Any], 
                                   sort_by: str = None, sort_order: str = "desc", limit: int = 50,
@@ -987,3 +1010,48 @@ class MongoDB(DatabaseInterface):
     async def get_average_product_price(self) -> float:
         result = await self._handle_product_price_queries_mongo({"operation": "average_price"})
         return result[0]["avg_price"] if result and "avg_price" in result[0] else 0.0
+
+    async def get_monthly_revenue(self, months: int = 1, last_month: bool = False) -> float:
+        """Get revenue for a specific month"""
+        try:
+            today = date.today()
+            if last_month:
+                # Get previous month
+                if today.month == 1:
+                    start_date = date(today.year - 1, 12, 1)
+                else:
+                    start_date = date(today.year, today.month - 1, 1)
+                end_date = date(start_date.year, start_date.month, 1) + timedelta(days=32)
+                end_date = end_date.replace(day=1) - timedelta(days=1)
+            else:
+                # Get current month
+                start_date = date(today.year, today.month, 1)
+                end_date = today
+            
+            pipeline = [
+                {
+                    "$match": {
+                        "order_date": {
+                            "$gte": start_date.isoformat(),
+                            "$lte": end_date.isoformat()
+                        },
+                        "status": "completed"
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": None,
+                        "monthly_revenue": {"$sum": "$total_amount"}
+                    }
+                }
+            ]
+            
+            cursor = self.db.orders.aggregate(pipeline)
+            result = await cursor.to_list(length=1)
+            revenue = result[0]["monthly_revenue"] if result else 0.0
+            month_name = start_date.strftime('%B %Y')
+            print(f"✅ Monthly revenue for {month_name}: ${revenue:,.2f}")
+            return revenue
+        except Exception as e:
+            print(f"❌ Error in get_monthly_revenue: {e}")
+            return 0.0    

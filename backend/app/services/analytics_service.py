@@ -1,6 +1,7 @@
 from app.database.factory import DatabaseFactory
 from app.services.llm_service import LLMService
 from datetime import datetime, date, timedelta
+from typing import Dict, Any, List, Optional
 from typing import Dict, Any, List
 import json
 
@@ -30,7 +31,13 @@ class AnalyticsService:
         self.db = await DatabaseFactory.create_database(self.current_db_type)
         print("🔄 Creating sample data...")
         await DatabaseFactory.initialize_sample_data(self.db)
+        
+        # Verify data integrity for MongoDB
+        if hasattr(self.db, 'verify_data_integrity'):
+            await self.db.verify_data_integrity()
+        
         print("✅ Database initialization completed")
+
 
     async def reinitialize_database(self, database_type: str = None):
         """Reinitialize database with new type"""
@@ -42,7 +49,12 @@ class AnalyticsService:
         if not self.db:
             await self.initialize_database()
         
-        # Parse the natural language query
+        # Manual handling for default dashboard questions
+        manual_result = await self._handle_manual_queries(query)
+        if manual_result:
+            return manual_result
+        
+        # Parse the natural language query using LLM for user requests
         parsed_intent = self.llm_service.parse_natural_language(query)
         
         if parsed_intent["intent"] == "unknown":
@@ -85,7 +97,39 @@ class AnalyticsService:
                 "data": None,
                 "response": f"Sorry, I encountered an error while processing your query: {error_msg}"
             }
-
+            
+    async def _handle_manual_queries(self, query: str) -> Optional[Dict[str, Any]]:
+        """Handle manual queries for default dashboard questions"""
+        query_lower = query.lower().strip()
+        
+        # Map default questions to specific intents
+        manual_mappings = {
+            "what is the total revenue for this week?": ("get_weekly_revenue", {"start_date": "this_week", "end_date": "this_week"}),
+            "show me today's sales": ("get_daily_sales", {"target_date": "today"}),
+            "what are the top 5 products by revenue?": ("get_top_products", {"limit": 5}),
+            "show me orders for customer 1": ("get_customer_orders", {"customer_id": "1"})
+        }
+        
+        if query_lower in manual_mappings:
+            intent, params = manual_mappings[query_lower]
+            print(f"🔧 Using manual mapping for: {query}")
+            
+            try:
+                data = await self._execute_analytics_function(intent, params)
+                serialized_data = self._serialize_data(data)
+                natural_response = await self.llm_service.generate_natural_response(serialized_data, query)
+                
+                return {
+                    "success": True,
+                    "intent": intent,
+                    "parameters": params,
+                    "data": serialized_data,
+                    "response": natural_response
+                }
+            except Exception as e:
+                print(f"Manual query error: {e}")
+        
+        return None
     async def _execute_analytics_function(self, intent: str, parameters: Dict[str, Any]) -> Any:
         """Execute the appropriate analytics function"""
         print(f"🔍 Executing intent: {intent} with parameters: {parameters}")
@@ -93,18 +137,32 @@ class AnalyticsService:
         processed_params = self._process_parameters(parameters)
         print(f"🔍 Processed parameters: {processed_params}")
         
-        if intent == "execute_dynamic_query":
-            # Extract dynamic query parameters
-            return await self.db.execute_dynamic_query(
-                table=processed_params.get("table", "customers"),
-                fields=processed_params.get("fields", ["*"]),
-                filters=processed_params.get("filters", {}),
-                sort_by=processed_params.get("sort_by"),
-                sort_order=processed_params.get("sort_order", "desc"),
-                limit=processed_params.get("limit", 50),
-                query_type=processed_params.get("query_type", "general"),
-                operation=processed_params.get("operation", "get")
+        # if intent == "execute_dynamic_query":
+        #     # Extract dynamic query parameters
+        #     return await self.db.execute_dynamic_query(
+        #         table=processed_params.get("table", "customers"),
+        #         fields=processed_params.get("fields", ["*"]),
+        #         filters=processed_params.get("filters", {}),
+        #         sort_by=processed_params.get("sort_by"),
+        #         sort_order=processed_params.get("sort_order", "desc"),
+        #         limit=processed_params.get("limit", 50),
+        #         query_type=processed_params.get("query_type", "general"),
+        #         operation=processed_params.get("operation", "get")
+        #     )
+
+        if intent == "get_monthly_revenue":
+            return await self.db.get_monthly_revenue(
+                processed_params.get("months", 1),
+                processed_params.get("last_month", False)
             )
+                
+        elif intent == "get_weekly_revenue":
+            return await self.db.get_weekly_revenue(
+                processed_params["start_date"],
+                processed_params["end_date"]
+            )
+
+
             
         elif intent == "get_daily_sales":
             return await self.db.get_daily_sales(
@@ -189,6 +247,8 @@ class AnalyticsService:
         
         else:
             raise ValueError(f"Unknown intent: {intent}")
+
+            
 
     def _process_parameters(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Process and validate parameters"""
@@ -275,3 +335,7 @@ class AnalyticsService:
         except Exception as e:
             print(f"Serialization error: {e}")
             return str(data)
+
+
+
+            

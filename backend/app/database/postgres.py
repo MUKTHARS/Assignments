@@ -278,6 +278,9 @@ class PostgresDB(DatabaseInterface):
                         }
                     )
 
+
+
+
     async def get_all_customers(self) -> List[Dict[str, Any]]:
         with self.engine.connect() as conn:
             result = conn.execute(

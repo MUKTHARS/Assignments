@@ -33,8 +33,6 @@ const AnalyticsDashboard = () => {
   const sampleQueries = [
     "What is the total revenue for this week?",
     "Show me today's sales",
-    "What are the top 5 products by revenue?",
-    "Show me sales by category for last month",
     "What is the monthly revenue trend for the past 6 months?",
     "Show me orders for customer 1"
   ];
