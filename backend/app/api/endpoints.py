@@ -19,9 +19,10 @@ async def process_natural_language_query(request: QueryRequest):
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
+    current_db_type = analytics_service.current_db_type or settings.DATABASE_TYPE
     return {
         "status": "healthy", 
-        "database_type": settings.DATABASE_TYPE,
+        "database_type": current_db_type,
         "initialized": analytics_service.db is not None
     }
 
@@ -29,7 +30,20 @@ async def health_check():
 async def reinitialize_database():
     """Reinitialize database connection and sample data"""
     try:
-        await analytics_service.initialize_database()
+        await analytics_service.reinitialize_database()
         return {"status": "success", "message": "Database reinitialized"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/switch-database")
+async def switch_database(config: DatabaseConfig):
+    """Switch database type dynamically"""
+    try:
+        await analytics_service.reinitialize_database(config.database_type)
+        return {
+            "status": "success", 
+            "message": f"Switched to {config.database_type}",
+            "database_type": config.database_type
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

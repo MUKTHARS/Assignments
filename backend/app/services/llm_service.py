@@ -16,8 +16,8 @@ class LLMService:
             
             # Try different model configurations
             model_configs = [
-                'gemini-1.0-pro',
-                'models/gemini-1.0-pro', 
+                'gemini-1.5-flash',
+                'gemini-1.5-pro',
                 'gemini-pro',
                 'models/gemini-pro'
             ]
@@ -345,6 +345,29 @@ class LLMService:
         
         # Enhanced fallback response generation
         return self._enhanced_fallback_response(data, original_query)
+
+    async def verify_data(self):
+        """Verify that data exists and is accessible"""
+        try:
+            products_count = await self.db.products.count_documents({})
+            customers_count = await self.db.customers.count_documents({})
+            orders_count = await self.db.orders.count_documents({})
+            
+            print(f"📊 Data verification:")
+            print(f"   Products: {products_count}")
+            print(f"   Customers: {customers_count}") 
+            print(f"   Orders: {orders_count}")
+            
+            # Check if orders have items
+            orders_with_items = await self.db.orders.count_documents({
+                "items": {"$exists": True, "$ne": []}
+            })
+            print(f"   Orders with items: {orders_with_items}")
+            
+            return True
+        except Exception as e:
+            print(f"❌ Data verification failed: {e}")
+            return False
 
     def _enhanced_fallback_response(self, data: Any, query: str) -> str:
         """Enhanced fallback response generation with product-specific handling"""

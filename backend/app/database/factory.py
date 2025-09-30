@@ -5,8 +5,9 @@ from app.config import settings
 
 class DatabaseFactory:
     @staticmethod
-    async def create_database() -> DatabaseInterface:
-        db_type = settings.DATABASE_TYPE.lower()
+    async def create_database(database_type: str = None) -> DatabaseInterface:
+        # Use provided database_type or fall back to settings
+        db_type = database_type or settings.DATABASE_TYPE.lower()
         
         if db_type == "postgres":
             if not settings.POSTGRES_URL:

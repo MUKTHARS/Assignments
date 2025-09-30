@@ -27,14 +27,33 @@ const DatabaseConfig = ({ onConfigUpdate }) => {
     setLoading(true);
     
     try {
+      // First update the configuration (you might want to save this to backend)
       await updateDatabaseConfig(config);
-      setStatus('Configuration updated successfully! Reinitializing database...');
       
-      // Wait a bit for reinitialization
-      setTimeout(() => {
-        checkCurrentConfig();
-        onConfigUpdate();
-      }, 2000);
+      // Then switch the database
+      const switchResponse = await fetch('http://localhost:8000/api/v1/switch-database', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          database_type: config.database_type,
+          connection_url: config.connection_url
+        })
+      });
+      
+      if (switchResponse.ok) {
+        const result = await switchResponse.json();
+        setStatus(`Database switched to ${config.database_type} successfully!`);
+        
+        // Wait a bit for reinitialization
+        setTimeout(() => {
+          checkCurrentConfig();
+          onConfigUpdate();
+        }, 2000);
+      } else {
+        setStatus('Error switching database');
+      }
       
     } catch (error) {
       setStatus(`Error: ${error.message}`);
@@ -110,7 +129,7 @@ const DatabaseConfig = ({ onConfigUpdate }) => {
         </div>
 
         <button type="submit" disabled={loading} className="submit-btn">
-          {loading ? 'Updating...' : 'Update Configuration'}
+          {loading ? 'Switching Database...' : 'Switch Database'}
         </button>
       </form>
     </div>

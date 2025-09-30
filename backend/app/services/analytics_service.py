@@ -8,17 +8,33 @@ class AnalyticsService:
     def __init__(self):
         self.llm_service = LLMService()
         self.db = None
+        self.current_db_type = None
 
-    async def initialize_database(self):
-        """Initialize database connection"""
-        if not self.db:
-            print("🔄 Initializing database connection...")
-            self.db = await DatabaseFactory.create_database()
-            print("🔄 Creating sample data...")
-            await DatabaseFactory.initialize_sample_data(self.db)
-            print("✅ Database initialization completed")
+    async def initialize_database(self, database_type: str = None):
+        """Initialize database connection with optional type override"""
+        if database_type:
+            self.current_db_type = database_type
         else:
-            print("✅ Database already initialized")    
+            self.current_db_type = None  # Will use settings.DATABASE_TYPE
+        
+        print(f"🔄 Initializing database connection...")
+        
+        # Close existing connection if any
+        if self.db:
+            try:
+                await self.db.disconnect()
+            except:
+                pass
+        
+        # Create new database connection
+        self.db = await DatabaseFactory.create_database(self.current_db_type)
+        print("🔄 Creating sample data...")
+        await DatabaseFactory.initialize_sample_data(self.db)
+        print("✅ Database initialization completed")
+
+    async def reinitialize_database(self, database_type: str = None):
+        """Reinitialize database with new type"""
+        await self.initialize_database(database_type)
 
     async def process_query(self, query: str) -> Dict[str, Any]:
         """Process natural language query and return results"""
@@ -72,9 +88,10 @@ class AnalyticsService:
 
     async def _execute_analytics_function(self, intent: str, parameters: Dict[str, Any]) -> Any:
         """Execute the appropriate analytics function"""
-        
+        print(f"🔍 Executing intent: {intent} with parameters: {parameters}")
         # Handle date parameters
         processed_params = self._process_parameters(parameters)
+        print(f"🔍 Processed parameters: {processed_params}")
         
         if intent == "execute_dynamic_query":
             # Extract dynamic query parameters
