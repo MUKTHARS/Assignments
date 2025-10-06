@@ -46,7 +46,7 @@ const AnalyticsDashboard = () => {
 
       <QueryInput onSubmit={handleQuerySubmit} loading={loading} />
 
-      <div className="sample-queries">
+      {/* <div className="sample-queries">
         <h4>Try these sample queries:</h4>
         <div className="sample-query-list">
           {sampleQueries.map((query, index) => (
@@ -60,7 +60,7 @@ const AnalyticsDashboard = () => {
             </button>
           ))}
         </div>
-      </div>
+      </div> */}
 
       {loading && (
         <div className="loading">
