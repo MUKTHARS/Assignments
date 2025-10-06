@@ -34,7 +34,7 @@ const AnalyticsDashboard = () => {
     "What is the total revenue for this week?",
     "Show me today's sales",
     "What is the monthly revenue trend for the past 6 months?",
-    "Show me orders for customer 1"
+    
   ];
 
   return (

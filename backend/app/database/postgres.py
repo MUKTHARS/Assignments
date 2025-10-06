@@ -397,14 +397,17 @@ class PostgresDB(DatabaseInterface):
             
             # Insert comprehensive orders and order items
             for i in range(1, 51):  # 50 orders for more data
-                order_date = (date.today() - timedelta(days=(i-1)*3)).isoformat()
+                order_date = (base_date + timedelta(days=days_offset)).isoformat
+                base_date = date(2025, 7, 1)  # Start from July 2025
+                days_offset = (i - 1) * 2  #
                 customer_id = (i % 10) + 1
                 status = random.choice(["completed", "completed", "completed", "completed", "pending", "shipped", "delivered"])
-                
+                order_date = (base_date + timedelta(days=days_offset)).isoformat()
                 # Calculate order totals
                 num_items = random.randint(1, 5)
                 order_total = 0
-                
+                if order_date > "2025-10-31":
+                    order_date = "2025-10-31"
                 # First insert the order to get the ID
                 order_result = conn.execute(
                     text("""

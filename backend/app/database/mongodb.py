@@ -332,11 +332,15 @@ class MongoDB(DatabaseInterface):
 
         # Create comprehensive orders with embedded items
         orders = []
+        base_date = date(2025, 7, 1)
         for i in range(1, 51):  # 50 orders for more data
-            order_date = (date.today() - timedelta(days=(i-1)*3)).isoformat()
+            days_offset = (i - 1) * 2
+            order_date = (base_date + timedelta(days=days_offset)).isoformat()
             customer_id = str((i % 10) + 1)
             status = random.choice(["completed", "completed", "completed", "completed", "pending", "shipped", "delivered"])
-            
+            customer_id = str((i % 10) + 1)
+            if order_date > "2025-10-31":
+                order_date = "2025-10-31"
             # Create order with embedded items
             order = {
                 "_id": str(i),

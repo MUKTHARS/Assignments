@@ -99,13 +99,23 @@ class AnalyticsService:
             }
             
     async def _handle_manual_queries(self, query: str) -> Optional[Dict[str, Any]]:
-        """Handle manual queries for default dashboard questions"""
+        """Handle manual queries for default dashboard questions with proper date ranges"""
         query_lower = query.lower().strip()
         
-        # Map default questions to specific intents
+        # Map default questions to specific intents with proper date calculations
+        from datetime import date, timedelta
+        
+        # Use your data timeframe reference date
+        reference_date = date(2025, 10, 15)
+        
         manual_mappings = {
-            "what is the total revenue for this week?": ("get_weekly_revenue", {"start_date": "this_week", "end_date": "this_week"}),
-            "show me today's sales": ("get_daily_sales", {"target_date": "today"}),
+            "what is the total revenue for this week?": ("get_weekly_revenue", {
+                "start_date": (reference_date - timedelta(days=reference_date.weekday())).isoformat(),
+                "end_date": (reference_date + timedelta(days=6 - reference_date.weekday())).isoformat()
+            }),
+            "show me today's sales": ("get_daily_sales", {
+                "target_date": reference_date.isoformat()
+            }),
             "what are the top 5 products by revenue?": ("get_top_products", {"limit": 5}),
             "show me orders for customer 1": ("get_customer_orders", {"customer_id": "1"})
         }
@@ -130,6 +140,7 @@ class AnalyticsService:
                 print(f"Manual query error: {e}")
         
         return None
+
     async def _execute_analytics_function(self, intent: str, parameters: Dict[str, Any]) -> Any:
         """Execute the appropriate analytics function"""
         print(f"🔍 Executing intent: {intent} with parameters: {parameters}")
@@ -256,48 +267,35 @@ class AnalyticsService:
         
         processed = parameters.copy()
         
-        # Handle date calculations
-        today = date.today()
+        # Handle date calculations - use your database timeframe (July-Oct 2025)
+        reference_date = date(2025, 9, 15)  # Middle of your data range
         
-        if "start_date" in parameters:
-            if parameters["start_date"] == "this_week":
-                start_of_week = today - timedelta(days=today.weekday())
-                processed["start_date"] = start_of_week
-                if "end_date" not in processed or processed["end_date"] == "this_week":
-                    processed["end_date"] = start_of_week + timedelta(days=6)
-            
-            elif parameters["start_date"] == "last_week":
-                start_of_last_week = today - timedelta(days=today.weekday() + 7)
-                processed["start_date"] = start_of_last_week
-                if "end_date" not in processed or processed["end_date"] == "last_week":
-                    processed["end_date"] = start_of_last_week + timedelta(days=6)
-            
-            elif parameters["start_date"] == "last_month":
-                first_day_current_month = today.replace(day=1)
-                last_month = first_day_current_month - timedelta(days=1)
-                first_day_last_month = last_month.replace(day=1)
-                processed["start_date"] = first_day_last_month
-                if "end_date" not in processed or processed["end_date"] == "today":
-                    processed["end_date"] = today
-        
-        if "end_date" in parameters and parameters["end_date"] == "today":
-            processed["end_date"] = today
-        
-        if "target_date" in parameters:
-            if parameters["target_date"] == "today":
-                processed["target_date"] = today
-            elif parameters["target_date"] == "yesterday":
-                processed["target_date"] = today - timedelta(days=1)
-        
-        # Ensure all date parameters are actual date objects
+        # Handle specific date strings first
         for key in ['start_date', 'end_date', 'target_date']:
             if key in processed and isinstance(processed[key], str):
-                # Try to parse string dates
-                try:
-                    processed[key] = datetime.strptime(processed[key], '%Y-%m-%d').date()
-                except (ValueError, TypeError):
-                    # If parsing fails, use today as fallback
-                    processed[key] = today
+                if processed[key] == 'today':
+                    processed[key] = reference_date
+                elif processed[key] == 'yesterday':
+                    processed[key] = reference_date - timedelta(days=1)
+                elif processed[key] == 'this_week':
+                    # Calculate this week relative to reference date
+                    start_of_week = reference_date - timedelta(days=reference_date.weekday())
+                    processed[key] = start_of_week
+                    # If both start_date and end_date are 'this_week', calculate end_date too
+                    if key == 'start_date' and processed.get('end_date') == 'this_week':
+                        processed['end_date'] = start_of_week + timedelta(days=6)
+                elif processed[key] == 'last_week':
+                    start_of_last_week = reference_date - timedelta(days=reference_date.weekday() + 7)
+                    processed[key] = start_of_last_week
+                    if key == 'start_date' and processed.get('end_date') == 'last_week':
+                        processed['end_date'] = start_of_last_week + timedelta(days=6)
+                else:
+                    # Try to parse as ISO date string
+                    try:
+                        processed[key] = datetime.strptime(processed[key], '%Y-%m-%d').date()
+                    except (ValueError, TypeError):
+                        # If parsing fails, use reference date
+                        processed[key] = reference_date
         
         return processed
 

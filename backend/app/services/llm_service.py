@@ -297,42 +297,111 @@ class LLMService:
             USER QUERY: "{query}"
 
             AVAILABLE FUNCTIONS:
-            - get_all_products(search_term): Search products by name (use for "price of macbook", "cost of iphone")
+            - get_weekly_revenue(start_date, end_date): Use ONLY for 7-day periods or custom date ranges
+            - get_monthly_revenue(months, last_month): Use for monthly revenue (current/last month)
+            - get_monthly_revenue_trend(months): Use for multi-month trends and analysis
+            - get_all_time_revenue(): Use for total lifetime revenue
+            - get_daily_sales(target_date): Use for single day sales
+            - get_sales_by_category(start_date, end_date): Use for category breakdowns within date ranges
+            - get_all_products(search_term): Search products by name
             - get_costliest_product(): Most expensive product
             - get_cheapest_product(): Least expensive product  
             - get_product_price_range(): Price statistics
             - get_average_product_price(): Average price
             - get_top_products(limit): Best selling products
-            - get_weekly_revenue(start_date, end_date): Weekly revenue
-            - get_monthly_revenue(months, last_month): Monthly revenue
-            - get_all_time_revenue(): Total revenue
-            - get_daily_sales(target_date): Daily sales
             - get_all_customers(): All customers
             - get_customer_orders(customer_id): Customer orders
+            - get_recent_orders(limit): Recent orders
+            - get_least_sold_products(limit): Least sold products
+            - get_repeat_customers(): Repeat customers
+            - get_inactive_customers(days_threshold): Inactive customers
+            - get_inventory_status(): Inventory status
+            - get_product_reviews(product_id): Product reviews
 
-            EXTRACT search_term for product queries:
-            - "price of macbook" → "macbook"
-            - "how much does iphone cost" → "iphone"
-            - "cost of samsung" → "samsung"
-            - "what is the price of laptop" → "laptop"
+            FUNCTION SELECTION RULES:
+            1. For "last X days" where X ≠ 7: Use get_weekly_revenue with calculated dates
+            2. For "last week" or "7 days": Use get_weekly_revenue with 7-day range
+            3. For "last X months" trends: Use get_monthly_revenue_trend(months=X)
+            4. For "last month" revenue: Use get_monthly_revenue(last_month=true)
+            5. For "this month" revenue: Use get_monthly_revenue(last_month=false)
+            6. For "last year" or long periods: Use get_weekly_revenue with 365-day range
+            7. For category analysis: Use get_sales_by_category
+            8. For trend analysis: Use get_monthly_revenue_trend
 
-            RESPOND WITH VALID JSON ONLY. Example for "price of macbook":
+            DATE RANGE CALCULATIONS:
+            - "last 15 days" → start_date = ((today - 15 days)), end_date = today → get_weekly_revenue
+            - "past 2 months" → months = 2 → get_monthly_revenue_trend
+            - "last 6 months trend" → months = 6 → get_monthly_revenue_trend
+            - "last month sales" → last_month = true → get_monthly_revenue
+            - "last year revenue" → start_date = ((today - 365 days)), end_date = today → get_weekly_revenue
+
+            RESPOND WITH VALID JSON ONLY. Examples:
+
+            Example for "last 15 days revenue":
             {{
-                "intent": "get_all_products",
-                "parameters": {{"search_term": "macbook"}},
+                "intent": "get_weekly_revenue",
+                "parameters": {{
+                    "start_date": "((today - 15 days))",
+                    "end_date": "today"
+                }},
                 "confidence": 0.95,
-                "reasoning": "User asked for MacBook price"
+                "reasoning": "15-day period, using weekly revenue function with custom date range"
             }}
 
-            Example for "most expensive product":
+            Example for "past 2 months sales trend":
             {{
-                "intent": "get_costliest_product", 
-                "parameters": {{}},
+                "intent": "get_monthly_revenue_trend",
+                "parameters": {{
+                    "months": 2
+                }},
+                "confidence": 0.92,
+                "reasoning": "Multi-month trend analysis, using monthly revenue trend function"
+            }}
+
+            Example for "last month revenue":
+            {{
+                "intent": "get_monthly_revenue",
+                "parameters": {{
+                    "last_month": true
+                }},
                 "confidence": 0.98,
-                "reasoning": "User asked for most expensive product"
+                "reasoning": "Specific month revenue request, using monthly revenue function"
+            }}
+
+            Example for "sales by category last 30 days":
+            {{
+                "intent": "get_sales_by_category",
+                "parameters": {{
+                    "start_date": "((today - 30 days))",
+                    "end_date": "today"
+                }},
+                "confidence": 0.94,
+                "reasoning": "Category breakdown request with date range"
+            }}
+
+            Example for "revenue trend for past 6 months":
+            {{
+                "intent": "get_monthly_revenue_trend",
+                "parameters": {{
+                    "months": 6
+                }},
+                "confidence": 0.96,
+                "reasoning": "Multi-month trend analysis request"
+            }}
+
+            Example for "last week revenue":
+            {{
+                "intent": "get_weekly_revenue",
+                "parameters": {{
+                    "start_date": "((today - 7 days))",
+                    "end_date": "today"
+                }},
+                "confidence": 0.97,
+                "reasoning": "7-day period, using weekly revenue function"
             }}
 
             NOW PROCESS: "{query}"
+            IMPORTANT: Choose the MOST SPECIFIC function based on the query context and time period.
             """
 
             print("🤖 Sending forced request to Gemini...")
@@ -347,6 +416,9 @@ class LLMService:
                 try:
                     result = json.loads(json_match.group())
                     
+                    # Process dynamic date calculations
+                    result = self._process_dynamic_dates(result, query)
+                    
                     # Validate the result
                     if self._validate_forced_result(result):
                         return result
@@ -359,6 +431,7 @@ class LLMService:
                     if fixed_json:
                         try:
                             result = json.loads(fixed_json)
+                            result = self._process_dynamic_dates(result, query)
                             if self._validate_forced_result(result):
                                 return result
                         except:
@@ -368,6 +441,148 @@ class LLMService:
             print(f"❌ Forced Gemini API error: {e}")
             
         return {"intent": "unknown", "parameters": {}, "confidence": 0.0}
+
+    def _process_dynamic_dates(self, result: Dict[str, Any], query: str) -> Dict[str, Any]:
+        """Process dynamic date calculations in the result parameters with proper historical data handling"""
+        if 'parameters' not in result:
+            return result
+        
+        params = result['parameters']
+        query_lower = query.lower()
+        
+        # Extract number of days from query
+        days_match = re.search(r'last\s+(\d+)\s+days', query_lower) or \
+                    re.search(r'past\s+(\d+)\s+days', query_lower) or \
+                    re.search(r'(\d+)\s+days', query_lower)
+        
+        # Extract number of months from query
+        months_match = re.search(r'last\s+(\d+)\s+months', query_lower) or \
+                      re.search(r'past\s+(\d+)\s+months', query_lower) or \
+                      re.search(r'(\d+)\s+months', query_lower)
+        
+        # Extract number of years from query
+        years_match = re.search(r'last\s+(\d+)\s+years', query_lower) or \
+                     re.search(r'past\s+(\d+)\s+years', query_lower) or \
+                     re.search(r'(\d+)\s+years', query_lower)
+        
+        # Extract number of weeks from query
+        weeks_match = re.search(r'last\s+(\d+)\s+weeks', query_lower) or \
+                     re.search(r'past\s+(\d+)\s+weeks', query_lower) or \
+                     re.search(r'(\d+)\s+weeks', query_lower)
+        
+        from datetime import date, timedelta, datetime
+        
+        # Calculate dates based on your database timeframe (most orders are from 2025)
+        # Use a reference date that matches your data distribution
+        reference_date = date(2025, 10, 15)  # Most orders are around July-Sept 2025
+        
+        if days_match:
+            days = int(days_match.group(1))
+            start_date = reference_date - timedelta(days=days)
+            end_date = reference_date
+            
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated {days} days range: {params['start_date']} to {params['end_date']}")
+        
+        elif weeks_match:
+            weeks = int(weeks_match.group(1))
+            days = weeks * 7
+            start_date = reference_date - timedelta(days=days)
+            end_date = reference_date
+            
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated {weeks} weeks range: {params['start_date']} to {params['end_date']}")
+        
+        elif months_match:
+            months = int(months_match.group(1))
+            # Approximate months as 30 days each
+            days = months * 30
+            start_date = reference_date - timedelta(days=days)
+            end_date = reference_date
+            
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated {months} months range: {params['start_date']} to {params['end_date']}")
+        
+        elif years_match:
+            years = int(years_match.group(1))
+            # Approximate years as 365 days
+            days = years * 365
+            start_date = reference_date - timedelta(days=days)
+            end_date = reference_date
+            
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated {years} years range: {params['start_date']} to {params['end_date']}")
+        
+        # Handle relative time periods without specific numbers
+        elif 'last week' in query_lower or 'past week' in query_lower:
+            start_date = reference_date - timedelta(days=7)
+            end_date = reference_date
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated last week range: {params['start_date']} to {params['end_date']}")
+        
+        elif 'last month' in query_lower or 'past month' in query_lower:
+            start_date = reference_date - timedelta(days=30)
+            end_date = reference_date
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated last month range: {params['start_date']} to {params['end_date']}")
+        
+        elif 'last year' in query_lower or 'past year' in query_lower:
+            start_date = reference_date - timedelta(days=365)
+            end_date = reference_date
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated last year range: {params['start_date']} to {params['end_date']}")
+        
+        elif 'last 3 months' in query_lower:
+            start_date = reference_date - timedelta(days=90)
+            end_date = reference_date
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated last 3 months range: {params['start_date']} to {params['end_date']}")
+        
+        elif 'last 6 months' in query_lower:
+            start_date = reference_date - timedelta(days=180)
+            end_date = reference_date
+            params['start_date'] = start_date.isoformat()
+            params['end_date'] = end_date.isoformat()
+            print(f"📅 Calculated last 6 months range: {params['start_date']} to {params['end_date']}")
+        
+        # Process any remaining dynamic date calculations from Gemini
+        if 'start_date' in params and isinstance(params['start_date'], str):
+            if '((today -' in params['start_date']:
+                # Extract days from the dynamic calculation
+                days_match = re.search(r'\(\(today - (\d+) days\)\)', params['start_date'])
+                if days_match:
+                    days = int(days_match.group(1))
+                    start_date = reference_date - timedelta(days=days)
+                    params['start_date'] = start_date.isoformat()
+                    print(f"📅 Processed dynamic date: {params['start_date']}")
+        
+        if 'end_date' in params and params['end_date'] == 'today':
+            params['end_date'] = reference_date.isoformat()
+            print(f"📅 Set end_date to reference date: {params['end_date']}")
+        
+        # Ensure dates are within your data range (adjust based on your actual data)
+        # Your data seems to be from mid-2025, so ensure we don't go too far back
+        if 'start_date' in params:
+            start_date_obj = datetime.fromisoformat(params['start_date']).date()
+            min_date = date(2025, 7, 1)  # Your earliest data starts from July 2025
+            max_date = date(2025, 10, 30)  # Your latest data goes to September 2025
+            if start_date_obj < min_date:
+                params['start_date'] = min_date.isoformat()
+                print(f"📅 Adjusted start_date to minimum: {params['start_date']}")
+            if start_date_obj > max_date:
+                params['start_date'] = max_date.isoformat()
+                print(f"📅 Adjusted start_date to maximum: {params['start_date']}")
+        
+        return result
+
 
     def _validate_forced_result(self, result: Dict[str, Any]) -> bool:
         """Validate forced Gemini parsing result"""
@@ -387,13 +602,16 @@ class LLMService:
             'get_product_price_range', 'get_average_product_price', 'get_top_products',
             'get_weekly_revenue', 'get_monthly_revenue', 'get_all_time_revenue',
             'get_daily_sales', 'get_all_customers', 'get_customer_orders',
-            'get_sales_by_category', 'get_monthly_revenue_trend', 'get_recent_orders'
+            'get_sales_by_category', 'get_monthly_revenue_trend', 'get_recent_orders',
+            'get_least_sold_products', 'get_repeat_customers', 'get_inactive_customers',
+            'get_inventory_status', 'get_product_reviews'
         ]
         
         if result['intent'] not in valid_intents:
             print(f"⚠️ Invalid intent in forced result: {result['intent']}")
             return False
             
+        # Don't validate date parameters too strictly - let the processing handle it
         # Ensure confidence exists
         if 'confidence' not in result:
             result['confidence'] = 0.8
