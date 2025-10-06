@@ -12,77 +12,120 @@ class LLMService:
         self.is_gemini_available = False
         
         try:
+            print(f"🔧 Initializing Gemini API with key: {settings.GEMINI_API_KEY[:10]}...")
+            
             # Configure with the correct API key
             genai.configure(api_key=settings.GEMINI_API_KEY)
             
-            print("🔧 Initializing Gemini API...")
+            # Try to use the most reliable model
+            model_name = 'gemini-2.0-flash'  # Most stable and widely available
             
-            # First, let's list available models to see what's accessible
             try:
+                # First, test if the API key is valid by listing models
                 available_models = genai.list_models()
-                model_names = [model.name for model in available_models]
-                print(f"📋 Available models: {model_names}")
+                print(f"✅ API key validated. Available models: {len(available_models)}")
                 
-                # Try to find the correct model names from available ones
-                working_models = []
-                for model in available_models:
-                    if 'generateContent' in model.supported_generation_methods:
-                        working_models.append(model.name)
-                        print(f"✅ Found working model: {model.name}")
+                # Check if our preferred model is available
+                available_model_names = [model.name for model in available_models]
+                print(f"📋 Available model names: {[name for name in available_model_names if 'gemini' in name][:5]}...")
                 
-                if working_models:
-                    # Use the first available model that supports generateContent
-                    model_name = working_models[0]
-                    self.model = genai.GenerativeModel(model_name)
+                # Try to find the best available model
+                preferred_models = [
+                    'models/gemini-2.0-flash',
+                    'models/gemini-2.0-flash-001',
+                    'models/gemini-pro',
+                    'models/gemini-1.5-flash',
+                    'models/gemini-1.5-pro',
+                    'models/gemini-flash-latest',
+                    'models/gemini-pro-latest'
+                ]
+                
+                selected_model = None
+                for preferred in preferred_models:
+                    if preferred in available_model_names:
+                        selected_model = preferred
+                        print(f"✅ Selected model: {selected_model}")
+                        break
+                
+                if not selected_model:
+                    # Fallback to any available Gemini model
+                    for model_name in available_model_names:
+                        if 'gemini' in model_name.lower() and 'generateContent' in [method for method in genai.get_model(model_name).supported_generation_methods]:
+                            selected_model = model_name
+                            print(f"🔄 Fallback to: {selected_model}")
+                            break
+                
+                if selected_model:
+                    self.model = genai.GenerativeModel(selected_model)
                     
                     # Test the model with a simple prompt
                     try:
                         test_response = self.model.generate_content("Hello, respond with 'OK' if working.")
-                        if test_response.text:
+                        if test_response and hasattr(test_response, 'text') and test_response.text:
                             self.is_gemini_available = True
-                            print(f"🎉 Gemini model initialized successfully: {model_name}")
+                            print(f"🎉 Gemini model initialized successfully: {selected_model}")
+                            print(f"✅ Test response: {test_response.text}")
                         else:
-                            print("❌ Model test failed - no response")
+                            print("❌ Model test failed - no valid response")
+                            self._try_direct_initialization()
                     except Exception as test_error:
                         print(f"❌ Model test failed: {test_error}")
-                
+                        self._try_direct_initialization()
+                else:
+                    print("❌ No suitable Gemini model found")
+                    self._try_direct_initialization()
+                    
             except Exception as list_error:
                 print(f"❌ Could not list models: {list_error}")
-                # Fallback to common model names
-                self._try_fallback_models()
+                self._try_direct_initialization()
                 
         except Exception as e:
             print(f"❌ Gemini configuration failed: {e}")
             print("🔄 Using enhanced fallback parsing")
-        
+    
         # Enhanced query patterns for better matching
         self.query_patterns = self._initialize_query_patterns()
+        
+        # Final check and debug output
+        print(f"🔍 Final Gemini status: {'AVAILABLE' if self.is_gemini_available else 'NOT AVAILABLE'}")
+        if self.is_gemini_available:
+            print(f"🔍 Model: {self.model}")
 
-    def _try_fallback_models(self):
-        """Try common model names as fallback"""
-        fallback_models = [
-            'gemini-flash-latest',
-            'gemini-pro-latest', 
-            'gemini-1.0-pro',
-            'models/gemini-1.0-pro',
+    def _try_direct_initialization(self):
+        """Try direct initialization with common models"""
+        print("🔄 Attempting direct model initialization...")
+        
+        direct_models = [
+            'gemini-2.0-flash',
             'gemini-pro', 
-            'models/gemini-pro',
-            'gemini-1.0-pro-001',
-            'models/gemini-1.0-pro-001'
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'models/gemini-pro'
         ]
         
-        for model_name in fallback_models:
+        for model_name in direct_models:
             try:
-                print(f"🔄 Trying fallback model: {model_name}")
+                print(f"🔄 Trying direct: {model_name}")
                 self.model = genai.GenerativeModel(model_name)
+                
+                # Quick silent test
                 test_response = self.model.generate_content("Test")
-                if test_response.text:
+                if test_response and hasattr(test_response, 'text'):
                     self.is_gemini_available = True
-                    print(f"✅ Fallback model working: {model_name}")
-                    break
+                    print(f"✅ Direct initialization successful: {model_name}")
+                    return
             except Exception as e:
-                print(f"❌ Fallback model failed {model_name}: {e}")
+                print(f"❌ Direct model {model_name} failed: {str(e)[:100]}...")
                 continue
+        
+        # Ultimate fallback - try without specifying model
+        try:
+            print("🔄 Trying ultimate fallback...")
+            self.model = genai.GenerativeModel('gemini-pro')
+            self.is_gemini_available = True
+            print("✅ Ultimate fallback successful")
+        except Exception as final_error:
+            print(f"❌ All initialization attempts failed: {final_error}")
 
     def _initialize_query_patterns(self):
         """Initialize comprehensive query patterns with better user query handling"""
@@ -104,16 +147,56 @@ class LLMService:
             r'.*what.*total.*revenue.*': ("get_all_time_revenue", {}),
             r'.*what.*revenue.*': ("get_all_time_revenue", {}),
             
+            # Product price queries - COMPREHENSIVE PATTERNS
+            r'.*costliest.*product.*': ("get_costliest_product", {}),
+            r'.*most.expensive.*product.*': ("get_costliest_product", {}),
+            r'.*highest.price.*product.*': ("get_costliest_product", {}),
+            r'.*maximum.price.*product.*': ("get_costliest_product", {}),
+            r'.*most.costly.*product.*': ("get_costliest_product", {}),
+            r'.*expensive.*product.*': ("get_costliest_product", {}),
+            r'.*cheapest.*product.*': ("get_cheapest_product", {}),
+            r'.*least.expensive.*product.*': ("get_cheapest_product", {}),
+            r'.*lowest.price.*product.*': ("get_cheapest_product", {}),
+            r'.*minimum.price.*product.*': ("get_cheapest_product", {}),
+            r'.*most.affordable.*product.*': ("get_cheapest_product", {}),
+            r'.*product.price.range.*': ("get_product_price_range", {}),
+            r'.*price.range.*product.*': ("get_product_price_range", {}),
+            r'.*min.and.max.price.*': ("get_product_price_range", {}),
+            r'.*price.statistics.*': ("get_product_price_range", {}),
+            r'.*average.product.price.*': ("get_average_product_price", {}),
+            r'.*avg.price.*product.*': ("get_average_product_price", {}),
+            r'.*mean.price.*product.*': ("get_average_product_price", {}),
+            r'.*what.is.the.average.price.*': ("get_average_product_price", {}),
+            
+            # Product search queries - NEW PATTERNS FOR SPECIFIC PRODUCTS
+            r'.*price.*of.*macbook.*': ("get_all_products", {"search_term": "macbook"}),
+            r'.*cost.*of.*macbook.*': ("get_all_products", {"search_term": "macbook"}),
+            r'.*how.much.*macbook.*': ("get_all_products", {"search_term": "macbook"}),
+            r'.*price.*of.*iphone.*': ("get_all_products", {"search_term": "iphone"}),
+            r'.*cost.*of.*iphone.*': ("get_all_products", {"search_term": "iphone"}),
+            r'.*how.much.*iphone.*': ("get_all_products", {"search_term": "iphone"}),
+            r'.*price.*of.*samsung.*': ("get_all_products", {"search_term": "samsung"}),
+            r'.*cost.*of.*samsung.*': ("get_all_products", {"search_term": "samsung"}),
+            r'.*price.*of.*laptop.*': ("get_all_products", {"search_term": "laptop"}),
+            r'.*cost.*of.*laptop.*': ("get_all_products", {"search_term": "laptop"}),
+            r'.*price.*of.*phone.*': ("get_all_products", {"search_term": "phone"}),
+            r'.*cost.*of.*phone.*': ("get_all_products", {"search_term": "phone"}),
+            r'.*how.much.*does.*cost.*': ("get_all_products", {"search_term": ""}),  # Generic price query
+            
             # Product performance queries
             r'.*top.*(\d+).*product.*revenue.*': ("get_top_products", {"limit": None}),
             r'.*top.*(\d+).*product.*': ("get_top_products", {"limit": None}),
             r'.*best.*selling.*product.*': ("get_top_products", {"limit": 5}),
             r'.*most.popular.*product.*': ("get_top_products", {"limit": 5}),
             r'.*top.*product.*': ("get_top_products", {"limit": 10}),
+            r'.*best.performing.*product.*': ("get_top_products", {"limit": 5}),
+            r'.*highest.selling.*product.*': ("get_top_products", {"limit": 5}),
             r'.*least.*sold.*product.*': ("get_least_sold_products", {"limit": 5}),
             r'.*worst.*selling.*product.*': ("get_least_sold_products", {"limit": 5}),
+            r'.*poorly.performing.*product.*': ("get_least_sold_products", {"limit": 5}),
+            r'.*lowest.selling.*product.*': ("get_least_sold_products", {"limit": 5}),
             
-            # Customer queries - IMPROVED PATTERNS
+            # Customer queries - COMPREHENSIVE PATTERNS
             r'.*all.*customer.*': ("get_all_customers", {}),
             r'.*list.*customer.*': ("get_all_customers", {}),
             r'.*show.*customer.*': ("get_all_customers", {}),
@@ -121,42 +204,227 @@ class LLMService:
             r'.*number.*customer.*': ("get_all_customers", {}),
             r'.*count.*customer.*': ("get_all_customers", {}),
             r'.*total.*customer.*': ("get_all_customers", {}),
+            r'.*customer.list.*': ("get_all_customers", {}),
             r'.*repeat.*customer.*': ("get_repeat_customers", {}),
+            r'.*loyal.*customer.*': ("get_repeat_customers", {}),
+            r'.*frequent.*customer.*': ("get_repeat_customers", {}),
+            r'.*multiple.orders.*customer.*': ("get_repeat_customers", {}),
             r'.*inactive.*customer.*': ("get_inactive_customers", {"days_threshold": 30}),
+            r'.*not.active.*customer.*': ("get_inactive_customers", {"days_threshold": 30}),
+            r'.*dormant.*customer.*': ("get_inactive_customers", {"days_threshold": 30}),
             
-            # Order queries with dates - IMPROVED PATTERNS
+            # Order queries with dates - COMPREHENSIVE PATTERNS
             r'.*today.*sale.*': ("get_daily_sales", {"target_date": "today"}),
             r'.*today.*order.*': ("get_daily_sales", {"target_date": "today"}),
             r'.*sales.*today.*': ("get_daily_sales", {"target_date": "today"}),
             r'.*do.we.have.*sale.*today.*': ("get_daily_sales", {"target_date": "today"}),
             r'.*any.*sale.*today.*': ("get_daily_sales", {"target_date": "today"}),
+            r'.*current.day.*sale.*': ("get_daily_sales", {"target_date": "today"}),
             r'.*yesterday.*sale.*': ("get_daily_sales", {"target_date": "yesterday"}),
             r'.*yesterday.*order.*': ("get_daily_sales", {"target_date": "yesterday"}),
+            r'.*previous.day.*sale.*': ("get_daily_sales", {"target_date": "yesterday"}),
             r'.*recent.*order.*': ("get_recent_orders", {"limit": 10}),
             r'.*latest.*order.*': ("get_recent_orders", {"limit": 10}),
+            r'.*new.*order.*': ("get_recent_orders", {"limit": 10}),
+            r'.*last.*order.*': ("get_recent_orders", {"limit": 10}),
             
             # Customer specific queries
             r'.*order.*for.customer.*(\d+).*': ("get_customer_orders", {"customer_id": None}),
             r'.*customer.*(\d+).*order.*': ("get_customer_orders", {"customer_id": None}),
             r'.*show.*order.*customer.*(\d+).*': ("get_customer_orders", {"customer_id": None}),
+            r'.*purchase.history.*customer.*(\d+).*': ("get_customer_orders", {"customer_id": None}),
+            r'.*transaction.history.*customer.*(\d+).*': ("get_customer_orders", {"customer_id": None}),
             
             # Category queries
             r'.*sale.*by.*categor.*': ("get_sales_by_category", {"start_date": "last_month", "end_date": "today"}),
             r'.*category.*performance.*': ("get_sales_by_category", {"start_date": "last_month", "end_date": "today"}),
             r'.*revenue.*by.*categor.*': ("get_sales_by_category", {"start_date": "last_month", "end_date": "today"}),
+            r'.*which.category.*best.*': ("get_sales_by_category", {"start_date": "last_month", "end_date": "today"}),
+            r'.*category.wise.*sale.*': ("get_sales_by_category", {"start_date": "last_month", "end_date": "today"}),
             
             # Trend queries
             r'.*monthly.*trend.*': ("get_monthly_revenue_trend", {"months": 6}),
             r'.*revenue.*trend.*': ("get_monthly_revenue_trend", {"months": 6}),
             r'.*sales.*trend.*': ("get_monthly_revenue_trend", {"months": 6}),
+            r'.*performance.trend.*': ("get_monthly_revenue_trend", {"months": 6}),
+            r'.*growth.trend.*': ("get_monthly_revenue_trend", {"months": 6}),
             r'.*last.(\d+).month.*trend.*': ("get_monthly_revenue_trend", {"months": None}),
+            r'.*past.(\d+).month.*trend.*': ("get_monthly_revenue_trend", {"months": None}),
+            
+            # Product catalog queries
+            r'.*all.*product.*': ("get_all_products", {}),
+            r'.*list.*product.*': ("get_all_products", {}),
+            r'.*show.*product.*': ("get_all_products", {}),
+            r'.*product.catalog.*': ("get_all_products", {}),
+            r'.*available.product.*': ("get_all_products", {}),
+            r'.*what.product.*do.we.have.*': ("get_all_products", {}),
         }
+
+    def parse_natural_language(self, query: str) -> Dict[str, Any]:
+        """Parse natural language query using forced Gemini parsing"""
+        print(f"🔍 Processing query: '{query}'")
+        
+        # FORCE Gemini to handle everything - no early fallbacks
+        if self.is_gemini_available and self.model:
+            try:
+                print("🚀 FORCING Gemini to process query...")
+                
+                # Use the most reliable parsing method
+                gemini_result = self._force_gemini_parsing(query)
+                if gemini_result and gemini_result.get('intent') != 'unknown':
+                    print(f"✅ Gemini parsing successful: {gemini_result['intent']}")
+                    return gemini_result
+                else:
+                    print("❌ Gemini parsing returned unknown intent")
+                    
+            except Exception as e:
+                print(f"❌ Gemini parsing failed with error: {e}")
+        
+        else:
+            print("❌ Gemini not available - using fallback parsing")
+    
+        # ONLY use pattern matching if Gemini is completely unavailable
+        print("🔄 Falling back to pattern matching...")
+        processed_query = self._preprocess_query(query)
+        return self._enhanced_pattern_parsing(processed_query.lower(), query)
+
+    def _force_gemini_parsing(self, query: str) -> Dict[str, Any]:
+        """Force Gemini to parse the query with maximum reliability"""
+        try:
+            prompt = f"""
+            CRITICAL: You MUST process this shopping analytics query and return ONLY valid JSON.
+            
+            USER QUERY: "{query}"
+
+            AVAILABLE FUNCTIONS:
+            - get_all_products(search_term): Search products by name (use for "price of macbook", "cost of iphone")
+            - get_costliest_product(): Most expensive product
+            - get_cheapest_product(): Least expensive product  
+            - get_product_price_range(): Price statistics
+            - get_average_product_price(): Average price
+            - get_top_products(limit): Best selling products
+            - get_weekly_revenue(start_date, end_date): Weekly revenue
+            - get_monthly_revenue(months, last_month): Monthly revenue
+            - get_all_time_revenue(): Total revenue
+            - get_daily_sales(target_date): Daily sales
+            - get_all_customers(): All customers
+            - get_customer_orders(customer_id): Customer orders
+
+            EXTRACT search_term for product queries:
+            - "price of macbook" → "macbook"
+            - "how much does iphone cost" → "iphone"
+            - "cost of samsung" → "samsung"
+            - "what is the price of laptop" → "laptop"
+
+            RESPOND WITH VALID JSON ONLY. Example for "price of macbook":
+            {{
+                "intent": "get_all_products",
+                "parameters": {{"search_term": "macbook"}},
+                "confidence": 0.95,
+                "reasoning": "User asked for MacBook price"
+            }}
+
+            Example for "most expensive product":
+            {{
+                "intent": "get_costliest_product", 
+                "parameters": {{}},
+                "confidence": 0.98,
+                "reasoning": "User asked for most expensive product"
+            }}
+
+            NOW PROCESS: "{query}"
+            """
+
+            print("🤖 Sending forced request to Gemini...")
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            print(f"🔍 Gemini forced response: {response_text}")
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\}', response_text, re.DOTALL)
+            if json_match:
+                try:
+                    result = json.loads(json_match.group())
+                    
+                    # Validate the result
+                    if self._validate_forced_result(result):
+                        return result
+                    else:
+                        print("⚠️ Forced result validation failed")
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON parsing error: {e}")
+                    # Try to fix common JSON issues
+                    fixed_json = self._fix_json_response(response_text)
+                    if fixed_json:
+                        try:
+                            result = json.loads(fixed_json)
+                            if self._validate_forced_result(result):
+                                return result
+                        except:
+                            pass
+                            
+        except Exception as e:
+            print(f"❌ Forced Gemini API error: {e}")
+            
+        return {"intent": "unknown", "parameters": {}, "confidence": 0.0}
+
+    def _validate_forced_result(self, result: Dict[str, Any]) -> bool:
+        """Validate forced Gemini parsing result"""
+        if not isinstance(result, dict):
+            return False
+            
+        required_keys = ['intent', 'parameters']
+        if not all(key in result for key in required_keys):
+            return False
+            
+        if not isinstance(result['parameters'], dict):
+            return False
+            
+        # Valid intents
+        valid_intents = [
+            'get_all_products', 'get_costliest_product', 'get_cheapest_product',
+            'get_product_price_range', 'get_average_product_price', 'get_top_products',
+            'get_weekly_revenue', 'get_monthly_revenue', 'get_all_time_revenue',
+            'get_daily_sales', 'get_all_customers', 'get_customer_orders',
+            'get_sales_by_category', 'get_monthly_revenue_trend', 'get_recent_orders'
+        ]
+        
+        if result['intent'] not in valid_intents:
+            print(f"⚠️ Invalid intent in forced result: {result['intent']}")
+            return False
+            
+        # Ensure confidence exists
+        if 'confidence' not in result:
+            result['confidence'] = 0.8
+            
+        return True
+
+    def _fix_json_response(self, response_text: str) -> str:
+        """Fix common JSON response issues from Gemini"""
+        try:
+            # Remove extra text before and after JSON
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                
+                # Fix common JSON issues
+                json_str = re.sub(r',\s*}', '}', json_str)  # Remove trailing commas
+                json_str = re.sub(r',\s*]', ']', json_str)  # Remove trailing commas in arrays
+                json_str = re.sub(r'(\w+):', r'"\1":', json_str)  # Add quotes to keys
+                json_str = re.sub(r':\s*\'([^\']+)\'', r': "\1"', json_str)  # Replace single quotes with double
+                
+                return json_str
+        except Exception as e:
+            print(f"❌ JSON fixing failed: {e}")
+        
+        return None
 
     def _preprocess_query(self, query: str) -> str:
         """Preprocess and normalize user queries for better matching"""
         query_lower = query.lower().strip()
         
-        # Common user query variations
+        # Common user query variations and typo corrections
         replacements = {
             r'do we have any': 'show',
             r'how many': 'count',
@@ -166,7 +434,26 @@ class LLMService:
             r'i want to see': 'show',
             r'give me': 'show',
             r'display': 'show',
-            r'list': 'show'
+            r'list': 'show',
+            r'could you': '',
+            r'would you': '',
+            r'please': '',
+            r'kindly': '',
+            r'i need': 'show',
+            r'i would like': 'show',
+            r'last moths': 'last month',
+            r'last months': 'last month',
+            r'last mont': 'last month',
+            r'this moths': 'this month',
+            r'this months': 'this month',
+            r'this mont': 'this month',
+            r'revenu': 'revenue',
+            r'reveneu': 'revenue',
+            r'reveniew': 'revenue',
+            r'costliest': 'most expensive',
+            r'cheapest': 'least expensive',
+            r'costley': 'most expensive',
+            r'cheep': 'least expensive'
         }
         
         processed_query = query_lower
@@ -174,7 +461,7 @@ class LLMService:
             processed_query = re.sub(pattern, replacement, processed_query)
         
         # Remove common filler words
-        filler_words = ['please', 'could you', 'would you', 'can you', 'the', 'a', 'an']
+        filler_words = ['the', 'a', 'an', 'our', 'my', 'your', 'some', 'any']
         for word in filler_words:
             processed_query = re.sub(r'\b' + word + r'\b', '', processed_query)
         
@@ -185,190 +472,6 @@ class LLMService:
             print(f"🔧 Query normalized: '{query_lower}' -> '{processed_query}'")
         
         return processed_query
-
-
-    def parse_natural_language(self, query: str) -> Dict[str, Any]:
-        """Parse natural language query with proper Gemini API usage"""
-        print(f"🔍 Processing query: '{query}'")
-        
-        # Preprocess the query first
-        processed_query = self._preprocess_query(query)
-        query_lower = processed_query.lower().strip()
-        
-        # Always try Gemini first if available
-        if self.is_gemini_available:
-            try:
-                gemini_result = self._try_gemini_parsing(query)
-                if gemini_result and gemini_result.get("confidence", 0) > 0.6:
-                    print(f"✅ Gemini parsing successful: {gemini_result['intent']}")
-                    return gemini_result
-                else:
-                    print("⚠️ Gemini parsing failed or low confidence, using fallback")
-            except Exception as e:
-                print(f"❌ Gemini parsing failed: {e}")
-        
-        # Enhanced pattern matching with parameter extraction
-        return self._enhanced_pattern_parsing(query_lower, query)
-
-    def _try_gemini_parsing(self, query: str) -> Dict[str, Any]:
-        """Try to parse using Gemini API with comprehensive prompts"""
-        try:
-            prompt = f"""
-            Analyze this shopping analytics query and map it to the most specific function.
-            
-            Available functions and their purposes:
-            - get_weekly_revenue(start_date, end_date): Calculate revenue for a specific week
-            - get_monthly_revenue_trend(months): Get monthly revenue trend for past N months  
-            - get_all_time_revenue(): Get total revenue across all time
-            - get_daily_sales(target_date): Get sales for a specific day
-            - get_top_products(limit): Get best selling products by revenue
-            - get_least_sold_products(limit): Get worst selling products by quantity
-            - get_all_customers(): List all customers
-            - get_all_products(): List all products
-            - get_customer_orders(customer_id): Get orders for specific customer
-            - get_sales_by_category(start_date, end_date): Get sales breakdown by category
-            - get_repeat_customers(): Get customers with multiple orders
-            - get_inactive_customers(days_threshold): Get inactive customers
-            - get_costliest_product(): Get most expensive product
-            - get_cheapest_product(): Get least expensive product
-            - get_product_price_range(): Get price statistics
-            - get_average_product_price(): Get average product price
-            - get_recent_orders(limit): Get recent orders
-
-            IMPORTANT: For date-related queries:
-            - "this week" means current week (Monday to Sunday)
-            - "last week" means previous week
-            - "this month" means current month
-            - "last month" means previous month
-            - "today" means current date
-            - "yesterday" means previous date
-
-            Query: "{query}"
-
-            Extract parameters like:
-            - customer_id: extract numbers after "customer" (e.g., "customer 1" -> "1")
-            - limit: extract numbers after "top" or "first" (e.g., "top 5" -> 5)
-            - dates: map to "this_week", "last_week", "today", "yesterday", etc.
-            - months: extract numbers for trend analysis
-
-            Respond with ONLY valid JSON in this exact format:
-            {{
-                "intent": "function_name",
-                "parameters": {{"param1": value1, "param2": value2}},
-                "confidence": 0.95
-            }}
-
-            If unsure, use get_all_time_revenue as default.
-            """
-            
-            print("🤖 Sending request to Gemini...")
-            response = self.model.generate_content(prompt)
-            response_text = response.text.strip()
-            
-            print(f"🔍 Gemini raw response: {response_text}")
-            
-            # Extract JSON from response
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                
-                # Validate the result
-                if self._validate_gemini_result(result, query):
-                    return result
-                else:
-                    print("⚠️ Gemini result validation failed")
-                    
-        except Exception as e:
-            print(f"Gemini API error: {e}")
-            
-        return None
-
-    def _validate_gemini_result(self, result: Dict[str, Any], query: str) -> bool:
-        """Validate Gemini parsing result"""
-        if not isinstance(result, dict):
-            return False
-            
-        required_keys = ['intent', 'parameters', 'confidence']
-        if not all(key in result for key in required_keys):
-            return False
-            
-        if not isinstance(result['parameters'], dict):
-            return False
-            
-        # Validate intent exists in available functions
-        valid_intents = [
-            'get_weekly_revenue', 'get_monthly_revenue_trend', 'get_all_time_revenue',
-            'get_daily_sales', 'get_top_products', 'get_least_sold_products',
-            'get_all_customers', 'get_all_products', 'get_customer_orders',
-            'get_sales_by_category', 'get_repeat_customers', 'get_inactive_customers',
-            'get_costliest_product', 'get_cheapest_product', 'get_product_price_range',
-            'get_average_product_price', 'get_recent_orders', 'get_monthly_revenue'
-        ]
-        
-        if result['intent'] not in valid_intents:
-            print(f"⚠️ Invalid intent from Gemini: {result['intent']}")
-            return False
-            
-        # Extract and validate parameters from query
-        result['parameters'] = self._extract_parameters_from_query(query, result['intent'], result['parameters'])
-        
-        return True
-
-    def _extract_parameters_from_query(self, query: str, intent: str, current_params: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract and validate parameters from query text"""
-        query_lower = query.lower()
-        params = current_params.copy()
-        
-        # Extract customer ID
-        if intent == "get_customer_orders":
-            customer_match = re.search(r'customer\s+(\d+)', query_lower)
-            if customer_match and not params.get('customer_id'):
-                params['customer_id'] = customer_match.group(1)
-        
-        # Extract limit
-        if intent in ["get_top_products", "get_least_sold_products", "get_recent_orders"]:
-            limit_match = re.search(r'top\s+(\d+)', query_lower) or re.search(r'first\s+(\d+)', query_lower) or re.search(r'(\d+).*product', query_lower)
-            if limit_match and not params.get('limit'):
-                params['limit'] = int(limit_match.group(1))
-        
-        # Extract months for trends
-        if intent == "get_monthly_revenue_trend":
-            months_match = re.search(r'last\s+(\d+)\s+month', query_lower) or re.search(r'past\s+(\d+)\s+month', query_lower) or re.search(r'(\d+).*month.*trend', query_lower)
-            if months_match and not params.get('months'):
-                params['months'] = int(months_match.group(1))
-        
-        # Handle date parameters
-        params = self._process_date_parameters(query_lower, intent, params)
-        
-        return params
-
-    def _process_date_parameters(self, query_lower: str, intent: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Process and set date parameters based on query text"""
-        # Handle weekly revenue
-        if intent == "get_weekly_revenue":
-            if "this week" in query_lower and not params.get('start_date'):
-                params['start_date'] = "this_week"
-                params['end_date'] = "this_week"
-            elif "last week" in query_lower and not params.get('start_date'):
-                params['start_date'] = "last_week"
-                params['end_date'] = "last_week"
-        
-        # Handle daily sales
-        elif intent == "get_daily_sales":
-            if "today" in query_lower and not params.get('target_date'):
-                params['target_date'] = "today"
-            elif "yesterday" in query_lower and not params.get('target_date'):
-                params['target_date'] = "yesterday"
-        
-        # Handle monthly trends
-        elif intent == "get_monthly_revenue_trend":
-            if "this month" in query_lower and not params.get('months'):
-                params['months'] = 1
-            elif "last month" in query_lower and not params.get('months'):
-                params['months'] = 1
-                params['last_month'] = True
-        
-        return params
 
     def _enhanced_pattern_parsing(self, query_lower: str, original_query: str) -> Dict[str, Any]:
         """Enhanced pattern-based parsing with better parameter extraction"""
@@ -430,7 +533,9 @@ class LLMService:
             'month': ['month', 'monthly'],
             'today': ['today', 'daily', 'current day', 'do we have', 'any sales'],
             'top': ['top', 'best', 'most', 'highest'],
-            'category': ['category', 'type', 'group']
+            'category': ['category', 'type', 'group'],
+            'costly': ['costliest', 'most expensive', 'highest price', 'maximum price'],
+            'cheap': ['cheapest', 'least expensive', 'lowest price', 'minimum price']
         }
         
         # Count keyword matches with weights
@@ -441,7 +546,11 @@ class LLMService:
                     scores[category] += 1
         
         # Enhanced intent determination with better logic
-        if scores['today'] > 0 and (scores['order'] > 0 or scores['revenue'] > 0):
+        if scores['costly'] > 0 and scores['product'] > 0:
+            return {"intent": "get_costliest_product", "parameters": {}, "confidence": 0.9}
+        elif scores['cheap'] > 0 and scores['product'] > 0:
+            return {"intent": "get_cheapest_product", "parameters": {}, "confidence": 0.9}
+        elif scores['today'] > 0 and (scores['order'] > 0 or scores['revenue'] > 0):
             return {"intent": "get_daily_sales", "parameters": {"target_date": "today"}, "confidence": 0.8}
         elif scores['customer'] > 1 and any(word in query_lower for word in ['how many', 'number', 'count', 'total']):
             return {"intent": "get_all_customers", "parameters": {}, "confidence": 0.9}
@@ -465,7 +574,11 @@ class LLMService:
             return {"intent": "get_sales_by_category", "parameters": {"start_date": "last_month", "end_date": "today"}, "confidence": 0.7}
         
         # Default safe fallback - try to be more specific
-        if "today" in query_lower:
+        if "costliest" in query_lower or "most expensive" in query_lower:
+            return {"intent": "get_costliest_product", "parameters": {}, "confidence": 0.7}
+        elif "cheapest" in query_lower or "least expensive" in query_lower:
+            return {"intent": "get_cheapest_product", "parameters": {}, "confidence": 0.7}
+        elif "today" in query_lower:
             return {"intent": "get_daily_sales", "parameters": {"target_date": "today"}, "confidence": 0.6}
         elif "customer" in query_lower:
             return {"intent": "get_all_customers", "parameters": {}, "confidence": 0.6}
@@ -474,11 +587,10 @@ class LLMService:
         
         return {"intent": "get_all_time_revenue", "parameters": {}, "confidence": 0.5}
 
-
     async def generate_natural_response(self, data: Any, original_query: str) -> str:
         """Generate natural language response using Gemini when available"""
         # Use Gemini if available for better responses
-        if self.is_gemini_available:
+        if self.is_gemini_available and self.model:
             try:
                 prompt = f"""
                 The user asked: "{original_query}"

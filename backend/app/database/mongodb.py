@@ -2,6 +2,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 import json
+import random
 
 from .base import DatabaseInterface
 
@@ -42,7 +43,7 @@ class MongoDB(DatabaseInterface):
             self.client.close()
 
     async def initialize_sample_data(self):
-        """Initialize sample data for testing"""
+        """Initialize comprehensive sample data for testing"""
         print("🔄 Initializing MongoDB sample data...")
         
         # Clear existing data to ensure clean state
@@ -50,27 +51,176 @@ class MongoDB(DatabaseInterface):
             await self.db.products.drop()
             await self.db.customers.drop()
             await self.db.orders.drop()
+            await self.db.categories.drop()
+            await self.db.reviews.drop()
+            await self.db.inventory.drop()
             print("✅ Cleared existing collections")
         except Exception as e:
             print(f"ℹ️ No existing collections to clear: {e}")
 
-        # Create sample products
+        # Create comprehensive categories
+        categories = [
+            {
+                "_id": str(i),
+                "name": name,
+                "description": desc,
+                "created_at": datetime.utcnow()
+            }
+            for i, (name, desc) in enumerate([
+                ("Electronics", "Latest gadgets and electronic devices"),
+                ("Clothing", "Fashionable clothing for all ages"),
+                ("Home & Kitchen", "Home appliances and kitchenware"),
+                ("Books", "Educational and entertainment books"),
+                ("Sports", "Sports equipment and accessories"),
+                ("Beauty", "Beauty and personal care products"),
+                ("Toys", "Toys and games for all ages"),
+                ("Automotive", "Car accessories and automotive parts"),
+            ], 1)
+        ]
+        
+        try:
+            await self.db.categories.insert_many(categories)
+            print(f"✅ Inserted {len(categories)} categories")
+        except Exception as e:
+            print(f"❌ Error inserting categories: {e}")
+
+        # Create comprehensive products
         products = [
             {
                 "_id": str(i),
                 "name": name,
                 "category": category,
+                "subcategory": subcategory,
+                "brand": brand,
                 "price": price,
-                "created_at": datetime.utcnow()
+                "original_price": original_price,
+                "description": description,
+                "features": features,
+                "specifications": specifications,
+                "tags": tags,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
             }
-            for i, (name, category, price) in enumerate([
-                ("Laptop", "Electronics", 999.99),
-                ("Smartphone", "Electronics", 699.99),
-                ("Headphones", "Electronics", 149.99),
-                ("T-Shirt", "Clothing", 29.99),
-                ("Jeans", "Clothing", 59.99),
-                ("Book", "Education", 19.99),
-                ("Coffee Mug", "Home", 12.99),
+            for i, (name, category, subcategory, brand, price, original_price, description, features, specifications, tags) in enumerate([
+                ("MacBook Pro 16-inch", "Electronics", "Laptops", "Apple", 2399.99, 2499.99, 
+                 "Powerful laptop for professionals", 
+                 ["M2 Pro chip", "16-inch Liquid Retina XDR display", "32GB unified memory", "1TB SSD storage"],
+                 {"processor": "Apple M2 Pro", "ram": "32GB", "storage": "1TB SSD", "display": "16.2-inch"},
+                 ["laptop", "apple", "professional", "premium"]),
+                
+                ("iPhone 15 Pro", "Electronics", "Smartphones", "Apple", 999.99, 1099.99,
+                 "Latest iPhone with advanced camera system",
+                 ["A17 Pro chip", "Titanium design", "Pro camera system", "5G capable"],
+                 {"storage": "128GB", "color": "Natural Titanium", "camera": "48MP"},
+                 ["smartphone", "apple", "premium", "5g"]),
+                
+                ("Samsung Galaxy S24", "Electronics", "Smartphones", "Samsung", 849.99, 899.99,
+                 "Advanced Android smartphone with AI features",
+                 ["Snapdragon 8 Gen 3", "Dynamic AMOLED 2X", "200MP camera", "AI-powered features"],
+                 {"storage": "256GB", "color": "Phantom Black", "camera": "200MP"},
+                 ["android", "samsung", "5g", "camera"]),
+                
+                ("Sony WH-1000XM5", "Electronics", "Headphones", "Sony", 349.99, 399.99,
+                 "Industry-leading noise canceling headphones",
+                 ["Noise Canceling", "30-hour battery", "Touch controls", "Voice assistant"],
+                 {"battery": "30 hours", "connectivity": "Bluetooth 5.2", "weight": "250g"},
+                 ["headphones", "noise-canceling", "wireless", "premium"]),
+                
+                ("Nike Air Max 270", "Clothing", "Shoes", "Nike", 149.99, 159.99,
+                 "Comfortable and stylish sneakers",
+                 ["Air Max unit", "Breathable mesh", "Rubber outsole", "Cushioned midsole"],
+                 {"sizes": ["US 7", "US 8", "US 9", "US 10", "US 11"], "colors": ["Black", "White", "Red"]},
+                 ["shoes", "nike", "sneakers", "athletic"]),
+                
+                ("Levi's 511 Slim Jeans", "Clothing", "Pants", "Levi's", 79.99, 89.99,
+                 "Classic slim fit jeans",
+                 ["Slim fit", "Stretch denim", "Five-pocket style", "Machine washable"],
+                 {"sizes": ["28x30", "30x30", "32x30", "34x30"], "colors": ["Dark Blue", "Black", "Light Blue"]},
+                 ["jeans", "levis", "slim-fit", "denim"]),
+                
+                ("Instant Pot Pro", "Home & Kitchen", "Kitchen Appliances", "Instant Pot", 129.99, 149.99,
+                 "8-in-1 pressure cooker and slow cooker",
+                 ["8-in-1 functionality", "Easy-to-use controls", "Stainless steel pot", "Safety features"],
+                 {"capacity": "6 quarts", "power": "1000W", "material": "Stainless Steel"},
+                 ["kitchen", "cooker", "instant-pot", "appliance"]),
+                
+                ("Dyson V15 Detect", "Home & Kitchen", "Vacuum Cleaners", "Dyson", 749.99, 799.99,
+                 "Powerful cordless vacuum with laser detection",
+                 ["Laser dust detection", "High torque cleaner head", "60-minute runtime", "HEPA filtration"],
+                 {"battery": "60 min", "bin_capacity": "0.77L", "weight": "3kg"},
+                 ["vacuum", "dyson", "cordless", "cleaning"]),
+                
+                ("The Midnight Library", "Books", "Fiction", "Penguin", 17.99, 19.99,
+                 "Bestselling novel by Matt Haig",
+                 ["New York Times Bestseller", "Thought-provoking", "Emotional journey"],
+                 {"pages": "304", "language": "English", "isbn": "978-0525559474"},
+                 ["fiction", "novel", "bestseller", "library"]),
+                
+                ("Python Crash Course", "Books", "Education", "No Starch Press", 34.99, 39.99,
+                 "Hands-on introduction to programming",
+                 ["Beginner-friendly", "Practical projects", "Updated for Python 3"],
+                 {"pages": "544", "language": "English", "isbn": "978-1593279288"},
+                 ["programming", "python", "education", "coding"]),
+                
+                ("Yoga Mat Premium", "Sports", "Fitness", "Lululemon", 78.99, 89.99,
+                 "High-quality non-slip yoga mat",
+                 ["Non-slip surface", "5mm thickness", "Eco-friendly materials", "Carry strap"],
+                 {"thickness": "5mm", "length": "72 inches", "weight": "2.5kg"},
+                 ["yoga", "fitness", "exercise", "mat"]),
+                
+                ("Vitamin C Serum", "Beauty", "Skincare", "The Ordinary", 12.99, 14.99,
+                 "Antioxidant protection for skin",
+                 ["Brightens complexion", "Reduces wrinkles", "Lightweight formula", "Vegan"],
+                 {"volume": "30ml", "skin_type": "All types", "ingredients": "Vitamin C, Hyaluronic Acid"},
+                 ["skincare", "vitamin-c", "beauty", "serum"]),
+                
+                ("LEGO Star Wars Millennium Falcon", "Toys", "Building Sets", "LEGO", 159.99, 179.99,
+                 "Iconic Star Wars spaceship building set",
+                 ["1344 pieces", "Includes mini-figures", "Detailed interior", "Collector's item"],
+                 {"pieces": "1344", "age_range": "9+", "theme": "Star Wars"},
+                 ["lego", "star-wars", "toy", "building"]),
+                
+                ("Car Phone Mount", "Automotive", "Accessories", "iOttie", 24.99, 29.99,
+                 "Easy one-touch smartphone car mount",
+                 ["One-touch mechanism", "360-degree rotation", "Strong suction cup", "Universal compatibility"],
+                 {"compatibility": "All smartphones", "mount_type": "Dashboard/Windshield"},
+                 ["car", "accessory", "phone-mount", "iottoe"]),
+                
+                ("Wireless Charging Pad", "Electronics", "Accessories", "Anker", 19.99, 24.99,
+                 "Fast wireless charging for compatible devices",
+                 ["10W fast charging", "LED indicator", "Non-slip surface", "Compact design"],
+                 {"power": "10W", "compatibility": "Qi-enabled devices", "cable_length": "1m"},
+                 ["charger", "wireless", "anker", "accessory"]),
+                
+                ("Stainless Steel Water Bottle", "Home & Kitchen", "Drinkware", "Hydro Flask", 34.99, 39.99,
+                 "Insulated water bottle keeps drinks cold for 24 hours",
+                 ["Temperature retention", "Durable construction", "BPA-free", "Multiple colors"],
+                 {"capacity": "32oz", "insulation": "Double-walled", "material": "Stainless Steel"},
+                 ["water-bottle", "hydration", "eco-friendly", "insulated"]),
+                
+                ("Bluetooth Speaker", "Electronics", "Audio", "JBL", 89.99, 99.99,
+                 "Portable waterproof Bluetooth speaker",
+                 ["IPX7 waterproof", "12-hour battery", "JBL bass radiator", "PartyBoost feature"],
+                 {"battery": "12 hours", "waterproof": "IPX7", "connectivity": "Bluetooth 5.1"},
+                 ["speaker", "bluetooth", "portable", "audio"]),
+                
+                ("Gaming Mouse", "Electronics", "Computer Accessories", "Logitech", 49.99, 59.99,
+                 "High-precision gaming mouse with RGB lighting",
+                 ["25K DPI sensor", "LIGHTSYNC RGB", "8 programmable buttons", "Lightweight design"],
+                 {"dpi": "25600", "buttons": "8", "weight": "85g", "connectivity": "USB"},
+                 ["gaming", "mouse", "logitech", "rgb"]),
+                
+                ("Mechanical Keyboard", "Electronics", "Computer Accessories", "Corsair", 129.99, 149.99,
+                 "RGB mechanical gaming keyboard",
+                 ["Cherry MX switches", "Per-key RGB lighting", "Aircraft-grade aluminum frame", "Dedicated media controls"],
+                 {"switches": "Cherry MX Red", "layout": "US QWERTY", "backlight": "RGB"},
+                 ["keyboard", "mechanical", "gaming", "corsair"]),
+                
+                ("Smart Watch", "Electronics", "Wearables", "Samsung", 249.99, 299.99,
+                 "Advanced health monitoring smartwatch",
+                 ["Health tracking", "GPS", "Sleep monitoring", "Smartphone notifications"],
+                 {"display": "1.4-inch", "battery": "2 days", "compatibility": "Android/iOS"},
+                 ["smartwatch", "wearable", "fitness", "samsung"])
             ], 1)
         ]
         
@@ -80,18 +230,54 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error inserting products: {e}")
 
-        # Create sample customers
+        # Create comprehensive customers
         customers = [
             {
                 "_id": str(i),
                 "name": name,
                 "email": email,
-                "created_at": datetime.utcnow()
+                "phone": phone,
+                "address": address,
+                "city": city,
+                "state": state,
+                "zip_code": zip_code,
+                "country": country,
+                "customer_since": customer_since,
+                "loyalty_tier": loyalty_tier,
+                "preferences": preferences,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
             }
-            for i, (name, email) in enumerate([
-                ("John Doe", "john@example.com"),
-                ("Jane Smith", "jane@example.com"),
-                ("Bob Johnson", "bob@example.com"),
+            for i, (name, email, phone, address, city, state, zip_code, country, customer_since, loyalty_tier, preferences) in enumerate([
+                ("Johnathan Smith", "john.smith@email.com", "+1-555-0101", "123 Main Street", "New York", "NY", "10001", "USA", 
+                 datetime(2022, 1, 15), "Gold", {"categories": ["Electronics", "Books"], "brands": ["Apple", "Sony"]}),
+                
+                ("Emily Johnson", "emily.johnson@email.com", "+1-555-0102", "456 Oak Avenue", "Los Angeles", "CA", "90210", "USA",
+                 datetime(2021, 8, 22), "Platinum", {"categories": ["Clothing", "Beauty"], "brands": ["Nike", "Levi's"]}),
+                
+                ("Michael Brown", "michael.brown@email.com", "+1-555-0103", "789 Pine Road", "Chicago", "IL", "60601", "USA",
+                 datetime(2023, 3, 10), "Silver", {"categories": ["Electronics", "Sports"], "brands": ["Samsung", "JBL"]}),
+                
+                ("Sarah Davis", "sarah.davis@email.com", "+1-555-0104", "321 Elm Street", "Houston", "TX", "77001", "USA",
+                 datetime(2020, 11, 5), "Platinum", {"categories": ["Home & Kitchen", "Beauty"], "brands": ["Dyson", "The Ordinary"]}),
+                
+                ("David Wilson", "david.wilson@email.com", "+1-555-0105", "654 Maple Drive", "Phoenix", "AZ", "85001", "USA",
+                 datetime(2022, 6, 18), "Gold", {"categories": ["Automotive", "Electronics"], "brands": ["Logitech", "Corsair"]}),
+                
+                ("Jennifer Miller", "jennifer.miller@email.com", "+1-555-0106", "987 Cedar Lane", "Philadelphia", "PA", "19101", "USA",
+                 datetime(2021, 2, 28), "Silver", {"categories": ["Toys", "Books"], "brands": ["LEGO", "Penguin"]}),
+                
+                ("Robert Taylor", "robert.taylor@email.com", "+1-555-0107", "147 Birch Court", "San Antonio", "TX", "78201", "USA",
+                 datetime(2023, 1, 8), "Bronze", {"categories": ["Sports", "Electronics"], "brands": ["Hydro Flask", "Anker"]}),
+                
+                ("Lisa Anderson", "lisa.anderson@email.com", "+1-555-0108", "258 Walnut Street", "San Diego", "CA", "92101", "USA",
+                 datetime(2020, 9, 14), "Platinum", {"categories": ["Clothing", "Home & Kitchen"], "brands": ["Lululemon", "Instant Pot"]}),
+                
+                ("Thomas Martinez", "thomas.martinez@email.com", "+1-555-0109", "369 Spruce Avenue", "Dallas", "TX", "75201", "USA",
+                 datetime(2022, 11, 30), "Gold", {"categories": ["Automotive", "Sports"], "brands": ["iOttie", "JBL"]}),
+                
+                ("Amanda Garcia", "amanda.garcia@email.com", "+1-555-0110", "741 Oakwood Drive", "San Jose", "CA", "95101", "USA",
+                 datetime(2021, 7, 12), "Silver", {"categories": ["Beauty", "Books"], "brands": ["The Ordinary", "No Starch Press"]})
             ], 1)
         ]
         
@@ -101,34 +287,97 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error inserting customers: {e}")
 
-        # Create sample orders with embedded items
+        # Create inventory data
+        inventory_items = []
+        for product_id in range(1, 21):
+            inventory_items.append({
+                "_id": str(product_id),
+                "product_id": str(product_id),
+                "quantity": random.randint(10, 200),
+                "low_stock_threshold": 20,
+                "warehouse_location": random.choice(["NYC", "LA", "CHI", "DAL", "ATL"]),
+                "last_restocked": datetime.utcnow() - timedelta(days=random.randint(1, 30)),
+                "created_at": datetime.utcnow()
+            })
+        
+        try:
+            await self.db.inventory.insert_many(inventory_items)
+            print(f"✅ Inserted {len(inventory_items)} inventory items")
+        except Exception as e:
+            print(f"❌ Error inserting inventory: {e}")
+
+        # Create product reviews
+        reviews = []
+        review_id = 1
+        for product_id in range(1, 21):
+            for customer_id in range(1, 11):
+                if random.random() > 0.7:  # 30% chance of review
+                    reviews.append({
+                        "_id": str(review_id),
+                        "product_id": str(product_id),
+                        "customer_id": str(customer_id),
+                        "rating": random.randint(3, 5),
+                        "title": f"Great product #{review_id}",
+                        "comment": f"This is my detailed review for product {product_id}. I found it to be excellent quality and would recommend it to others.",
+                        "verified_purchase": random.choice([True, False]),
+                        "created_at": datetime.utcnow() - timedelta(days=random.randint(1, 180))
+                    })
+                    review_id += 1
+        
+        try:
+            await self.db.reviews.insert_many(reviews)
+            print(f"✅ Inserted {len(reviews)} product reviews")
+        except Exception as e:
+            print(f"❌ Error inserting reviews: {e}")
+
+        # Create comprehensive orders with embedded items
         orders = []
-        for i in range(1, 21):
-            order_date = (date.today() - timedelta(days=(i-1)*2)).isoformat()
-            customer_id = str((i % 3) + 1)
-            total_amount = i * 50
+        for i in range(1, 51):  # 50 orders for more data
+            order_date = (date.today() - timedelta(days=(i-1)*3)).isoformat()
+            customer_id = str((i % 10) + 1)
+            status = random.choice(["completed", "completed", "completed", "completed", "pending", "shipped", "delivered"])
             
             # Create order with embedded items
             order = {
                 "_id": str(i),
                 "customer_id": customer_id,
                 "order_date": order_date,
-                "total_amount": total_amount,
-                "status": "completed",
+                "total_amount": 0,  # Will calculate
+                "status": status,
+                "shipping_address": f"{random.randint(100, 999)} {random.choice(['Main', 'Oak', 'Pine', 'Maple'])} St",
+                "shipping_city": random.choice(["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"]),
+                "shipping_state": random.choice(["NY", "CA", "IL", "TX", "AZ"]),
+                "shipping_zip": f"{random.randint(10000, 99999)}",
+                "payment_method": random.choice(["credit_card", "paypal", "apple_pay", "google_pay"]),
+                "payment_status": "paid" if status in ["completed", "shipped", "delivered"] else "pending",
                 "created_at": datetime.utcnow(),
-                "items": []  # Initialize empty items array
+                "items": []
             }
             
-            # Add 1-3 items to each order
-            num_items = (i % 3) + 1
-            for j in range(1, num_items + 1):
-                product_id = str(((i + j - 1) % 7) + 1)
+            # Add 1-5 items to each order
+            num_items = random.randint(1, 5)
+            order_total = 0
+            
+            for j in range(num_items):
+                product_id = str(random.randint(1, 20))
+                quantity = random.randint(1, 3)
+                unit_price = (int(product_id) * 50) + random.randint(10, 99) + 0.99
+                item_total = quantity * unit_price
+                order_total += item_total
+                
                 order_item = {
                     "product_id": product_id,
-                    "quantity": j,
-                    "unit_price": (int(product_id) * 10) + 9.99
+                    "product_name": f"Product {product_id}",
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                    "item_total": item_total
                 }
                 order["items"].append(order_item)
+            
+            order["total_amount"] = round(order_total, 2)
+            order["tax_amount"] = round(order_total * 0.08, 2)
+            order["shipping_cost"] = 9.99 if order_total < 100 else 0
+            order["final_amount"] = order["total_amount"] + order["tax_amount"] + order["shipping_cost"]
             
             orders.append(order)
         
@@ -140,17 +389,17 @@ class MongoDB(DatabaseInterface):
             products_count = await self.db.products.count_documents({})
             customers_count = await self.db.customers.count_documents({})
             orders_count = await self.db.orders.count_documents({})
+            categories_count = await self.db.categories.count_documents({})
+            reviews_count = await self.db.reviews.count_documents({})
+            inventory_count = await self.db.inventory.count_documents({})
+            
             print(f"📊 Data verification - Products: {products_count}, Customers: {customers_count}, Orders: {orders_count}")
+            print(f"📊 Additional data - Categories: {categories_count}, Reviews: {reviews_count}, Inventory: {inventory_count}")
             
         except Exception as e:
             print(f"❌ Error inserting orders: {e}")
 
-        print("✅ MongoDB sample data initialization completed")
-
-
-
-
-
+        print("✅ MongoDB comprehensive sample data initialization completed")
 
     async def get_weekly_revenue(self, start_date: date, end_date: date) -> float:
         try:
@@ -225,8 +474,6 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error in get_daily_sales: {e}")
             return []
-
-
 
     async def get_top_products(self, limit: int = 10) -> List[Dict[str, Any]]:
         try:
@@ -325,8 +572,6 @@ class MongoDB(DatabaseInterface):
             print(f"❌ Error in get_customer_orders: {e}")
             return []
 
-    
-
     async def get_sales_by_category(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         try:
             pipeline = [
@@ -385,6 +630,7 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error in get_sales_by_category: {e}")
             return []
+
     async def debug_data_structure(self):
         """Debug method to check data structure"""
         try:
@@ -401,13 +647,17 @@ class MongoDB(DatabaseInterface):
             # Count documents
             orders_count = await self.db.orders.count_documents({})
             products_count = await self.db.products.count_documents({})
-            print(f"📊 Counts - Orders: {orders_count}, Products: {products_count}")
+            customers_count = await self.db.customers.count_documents({})
+            categories_count = await self.db.categories.count_documents({})
+            reviews_count = await self.db.reviews.count_documents({})
+            inventory_count = await self.db.inventory.count_documents({})
+            
+            print(f"📊 Counts - Orders: {orders_count}, Products: {products_count}, Customers: {customers_count}")
+            print(f"📊 Additional - Categories: {categories_count}, Reviews: {reviews_count}, Inventory: {inventory_count}")
             
         except Exception as e:
             print(f"❌ Debug error: {e}")
-    
-    
-    
+
     async def get_monthly_revenue_trend(self, months: int = 6) -> List[Dict[str, Any]]:
         try:
             end_date = date.today()
@@ -467,8 +717,7 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             print(f"❌ Error in get_monthly_revenue_trend: {e}")
             return []
-    
-    
+
     async def get_all_time_revenue(self) -> float:
         try:
             pipeline = [
@@ -556,7 +805,6 @@ class MongoDB(DatabaseInterface):
             print(f"❌ Error in get_recent_orders: {e}")
             return []
 
-   
     async def execute_custom_query(self, query: str) -> List[Dict[str, Any]]:
         try:
             if query.strip().lower().startswith('db.'):
@@ -572,101 +820,14 @@ class MongoDB(DatabaseInterface):
         except Exception as e:
             raise Exception(f"Query execution error: {str(e)}")
 
-    async def initialize_sample_data(self):
-        """Initialize sample data for testing"""
-        # Check if data already exists
-        products_count = await self.db.products.count_documents({})
-        
-        if products_count > 0:
-            return  # Data already exists
-        
-        # Insert sample products
-        products = [
-            {
-                "_id": str(i),
-                "name": name,
-                "category": category,
-                "price": price,
-                "created_at": datetime.utcnow()
-            }
-            for i, (name, category, price) in enumerate([
-                ("Laptop", "Electronics", 999.99),
-                ("Smartphone", "Electronics", 699.99),
-                ("Headphones", "Electronics", 149.99),
-                ("T-Shirt", "Clothing", 29.99),
-                ("Jeans", "Clothing", 59.99),
-                ("Book", "Education", 19.99),
-                ("Coffee Mug", "Home", 12.99),
-            ], 1)
-        ]
-        
-        await self.db.products.insert_many(products)
-        
-        # Insert sample customers
-        customers = [
-            {
-                "_id": str(i),
-                "name": name,
-                "email": email,
-                "created_at": datetime.utcnow()
-            }
-            for i, (name, email) in enumerate([
-                ("John Doe", "john@example.com"),
-                ("Jane Smith", "jane@example.com"),
-                ("Bob Johnson", "bob@example.com"),
-            ], 1)
-        ]
-        
-        await self.db.customers.insert_many(customers)
-        
-        # Insert sample orders and order items
-        orders = []
-        order_items = []
-        
-        for i in range(1, 21):
-            order_date = (date.today() - timedelta(days=(i-1)*2)).isoformat()
-            customer_id = str((i % 3) + 1)
-            total_amount = i * 50
-            
-            order = {
-                "_id": str(i),
-                "customer_id": customer_id,
-                "order_date": order_date,
-                "total_amount": total_amount,
-                "status": "completed",
-                "created_at": datetime.utcnow()
-            }
-            orders.append(order)
-            
-            # Add order items
-            for j in range(1, 4):
-                product_id = str(((i + j - 1) % 7) + 1)
-                order_item = {
-                    "order_id": str(i),
-                    "product_id": product_id,
-                    "quantity": j,
-                    "unit_price": (int(product_id) * 10) + 9.99,
-                    "created_at": datetime.utcnow()
-                }
-                order_items.append(order_item)
-        
-        await self.db.orders.insert_many(orders)
-        await self.db.order_items.insert_many(order_items)
-
-
-
-
-
     async def execute_dynamic_query(self, table: str, fields: List[str], filters: Dict[str, Any], 
                                   sort_by: str = None, sort_order: str = "desc", limit: int = 50,
                                   query_type: str = "general", operation: str = "get") -> List[Dict[str, Any]]:
-        """Execute dynamic queries based on table and fields with enhanced capabilities"""
+        """Execute dynamic queries with enhanced capabilities including search"""
         
-        collection = self.db[table]
-        
-        # Handle product price queries dynamically
-        if table == "products" and any(keyword in str(filters) for keyword in ['costliest', 'cheapest', 'price_range']):
-            return await self._handle_product_price_queries_mongo(filters)
+        # Handle product search queries
+        if table == "products" and filters.get('search_term'):
+            return await self.get_products_by_search(filters['search_term'])
         
         # Build projection
         projection = {"_id": 0}
@@ -822,20 +983,6 @@ class MongoDB(DatabaseInterface):
         
         cursor = self.db.orders.aggregate(pipeline)
         return await cursor.to_list(length=None)
-
-    async def get_all_time_revenue(self) -> float:
-        pipeline = [
-            {
-                "$group": {
-                    "_id": None,
-                    "total_revenue": {"$sum": "$total_amount"}
-                }
-            }
-        ]
-        
-        cursor = self.db.orders.aggregate(pipeline)
-        result = await cursor.to_list(length=1)
-        return result[0]["total_revenue"] if result else 0.0
 
     async def get_inactive_customers(self, days_threshold: int = 30) -> List[Dict[str, Any]]:
         cutoff_date = (datetime.utcnow() - timedelta(days=days_threshold)).date().isoformat()
@@ -1054,4 +1201,113 @@ class MongoDB(DatabaseInterface):
             return revenue
         except Exception as e:
             print(f"❌ Error in get_monthly_revenue: {e}")
-            return 0.0    
+            return 0.0
+
+    async def get_all_categories(self) -> List[Dict[str, Any]]:
+        """Get all product categories"""
+        try:
+            cursor = self.db.categories.find().sort("name", 1)
+            results = await cursor.to_list(length=None)
+            print(f"✅ All categories: {len(results)} categories")
+            return results
+        except Exception as e:
+            print(f"❌ Error in get_all_categories: {e}")
+            return []
+
+    async def get_product_reviews(self, product_id: str) -> List[Dict[str, Any]]:
+        """Get reviews for a specific product"""
+        try:
+            pipeline = [
+                {
+                    "$match": {
+                        "product_id": product_id
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": "customers",
+                        "localField": "customer_id",
+                        "foreignField": "_id",
+                        "as": "customer"
+                    }
+                },
+                {
+                    "$project": {
+                        "rating": 1,
+                        "title": 1,
+                        "comment": 1,
+                        "verified_purchase": 1,
+                        "created_at": 1,
+                        "customer_name": {"$arrayElemAt": ["$customer.name", 0]},
+                        "_id": 0
+                    }
+                },
+                {
+                    "$sort": {"created_at": -1}
+                }
+            ]
+            
+            cursor = self.db.reviews.aggregate(pipeline)
+            results = await cursor.to_list(length=None)
+            print(f"✅ Product {product_id} reviews: {len(results)} reviews")
+            return results
+        except Exception as e:
+            print(f"❌ Error in get_product_reviews: {e}")
+            return []
+
+    async def get_products_by_search(self, search_term: str) -> List[Dict[str, Any]]:
+        """Get products by search term in name"""
+        try:
+            # Case-insensitive search for products containing the search term
+            query = {"name": {"$regex": search_term, "$options": "i"}}
+            cursor = self.db.products.find(query)
+            results = await cursor.to_list(length=None)
+            print(f"✅ Products search for '{search_term}': {len(results)} results")
+            return results
+        except Exception as e:
+            print(f"❌ Error in get_products_by_search: {e}")
+            return []
+
+
+    async def get_inventory_status(self) -> List[Dict[str, Any]]:
+        """Get current inventory status with product details"""
+        try:
+            pipeline = [
+                {
+                    "$lookup": {
+                        "from": "products",
+                        "localField": "product_id",
+                        "foreignField": "_id",
+                        "as": "product"
+                    }
+                },
+                {
+                    "$unwind": "$product"
+                },
+                {
+                    "$project": {
+                        "product_id": 1,
+                        "product_name": "$product.name",
+                        "category": "$product.category",
+                        "quantity": 1,
+                        "low_stock_threshold": 1,
+                        "warehouse_location": 1,
+                        "last_restocked": 1,
+                        "is_low_stock": {
+                            "$lt": ["$quantity", "$low_stock_threshold"]
+                        },
+                        "_id": 0
+                    }
+                },
+                {
+                    "$sort": {"is_low_stock": -1, "quantity": 1}
+                }
+            ]
+            
+            cursor = self.db.inventory.aggregate(pipeline)
+            results = await cursor.to_list(length=None)
+            print(f"✅ Inventory status: {len(results)} items")
+            return results
+        except Exception as e:
+            print(f"❌ Error in get_inventory_status: {e}")
+            return []
