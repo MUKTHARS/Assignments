@@ -19,7 +19,7 @@ async def process_natural_language_query(request: QueryRequest):
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
-    current_db_type = analytics_service.current_db_type or settings.DATABASE_TYPE
+    current_db_type = analytics_service.current_db_type or "mongodb"
     return {
         "status": "healthy", 
         "database_type": current_db_type,

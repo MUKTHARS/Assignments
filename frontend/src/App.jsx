@@ -7,10 +7,22 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [apiStatus, setApiStatus] = useState('checking');
   const [apiDetails, setApiDetails] = useState(null);
+  const [currentDatabase, setCurrentDatabase] = useState('mongodb');
+  const [theme, setTheme] = useState(() => {
+    // Get theme from localStorage or default to 'light'
+    return localStorage.getItem('theme') || 'light';
+  });
 
   useEffect(() => {
     checkApiHealth();
   }, []);
+
+  useEffect(() => {
+    // Apply theme to document
+    document.documentElement.setAttribute('data-theme', theme);
+    // Save theme to localStorage
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   const checkApiHealth = async () => {
     try {
@@ -29,29 +41,25 @@ function App() {
     }
   };
 
+  const toggleTheme = () => {
+    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  };
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🛍️ Shopping Analytics Dashboard</h1>
-        <div className="status-indicator">
-          API Status: 
-          <span className={`status ${apiStatus}`}>
-            {apiStatus === 'healthy' ? '✅ Healthy' : '❌ Unhealthy'}
-          </span>
-          {apiDetails && (
-            <span className="api-details">
-              | DB: {apiDetails.database_type} | Port: {apiDetails.port || 8000}
-            </span>
-          )}
-        </div>
+        <h1>🛍️ Sapple Store</h1>
+        <button className="theme-toggle" onClick={toggleTheme}>
+          {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+        </button>
       </header>
-
+      
       <nav className="app-nav">
         <button 
           className={currentView === 'dashboard' ? 'active' : ''}
           onClick={() => setCurrentView('dashboard')}
         >
-          Analytics Dashboard
+          Ask Here
         </button>
         <button 
           className={currentView === 'config' ? 'active' : ''}
@@ -59,14 +67,8 @@ function App() {
         >
           Database Configuration
         </button>
-        <button 
-          className="refresh-btn"
-          onClick={checkApiHealth}
-        >
-          🔄 Refresh Status
-        </button>
       </nav>
-
+      
       <main className="app-main">
         {currentView === 'dashboard' && <AnalyticsDashboard />}
         {currentView === 'config' && <DatabaseConfig onConfigUpdate={checkApiHealth} />}

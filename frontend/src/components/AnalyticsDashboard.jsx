@@ -40,8 +40,8 @@ const AnalyticsDashboard = () => {
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h2>Analytics Dashboard</h2>
-        <p>Ask natural language questions about your sales data</p>
+        <h2>Hello There !</h2>
+        <p>Ask questions about your store data</p>
       </div>
 
       <QueryInput onSubmit={handleQuerySubmit} loading={loading} />
@@ -82,9 +82,9 @@ const AnalyticsDashboard = () => {
             <h3>Results</h3>
             <div className="result-meta">
               <span className="intent">Intent: {results.intent}</span>
-              <span className="confidence">
+              {/* <span className="confidence">
                 Confidence: {(results.confidence * 100).toFixed(1)}%
-              </span>
+              </span> */}
             </div>
           </div>
           

@@ -9,14 +9,14 @@ class AnalyticsService:
     def __init__(self):
         self.llm_service = LLMService()
         self.db = None
-        self.current_db_type = None
+        self.current_db_type = "mongodb"
 
     async def initialize_database(self, database_type: str = None):
         """Initialize database connection with optional type override"""
         if database_type:
             self.current_db_type = database_type
         else:
-            self.current_db_type = None  # Will use settings.DATABASE_TYPE
+            self.current_db_type = "mongodb"  # Will use settings.DATABASE_TYPE
         
         print(f"🔄 Initializing database connection...")
         
