@@ -4,6 +4,7 @@ from datetime import datetime, date, timedelta
 from typing import Dict, Any, List, Optional
 from typing import Dict, Any, List
 import json
+import traceback
 
 class AnalyticsService:
     def __init__(self):
@@ -13,30 +14,43 @@ class AnalyticsService:
 
     async def initialize_database(self, database_type: str = None):
         """Initialize database connection with optional type override"""
+        # Use MongoDB as default if no type specified
         if database_type:
             self.current_db_type = database_type
         else:
-            self.current_db_type = "mongodb"  # Will use settings.DATABASE_TYPE
+            self.current_db_type = "mongodb"
         
-        print(f"🔄 Initializing database connection...")
+        print(f"🔄 Initializing database connection... Type: {self.current_db_type}")
         
         # Close existing connection if any
         if self.db:
             try:
                 await self.db.disconnect()
-            except:
-                pass
+                print("✅ Closed previous database connection")
+            except Exception as e:
+                print(f"⚠️ Error closing previous connection: {e}")
         
-        # Create new database connection
-        self.db = await DatabaseFactory.create_database(self.current_db_type)
-        print("🔄 Creating sample data...")
-        await DatabaseFactory.initialize_sample_data(self.db)
-        
-        # Verify data integrity for MongoDB
-        if hasattr(self.db, 'verify_data_integrity'):
-            await self.db.verify_data_integrity()
-        
-        print("✅ Database initialization completed")
+        try:
+            # Create new database connection
+            self.db = await DatabaseFactory.create_database(self.current_db_type)
+            print("🔄 Creating sample data...")
+            await DatabaseFactory.initialize_sample_data(self.db)
+            
+            print("✅ Database initialization completed")
+            
+        except Exception as e:
+            print(f"❌ Database initialization failed: {str(e)}")
+            print(f"🔍 Full traceback: {traceback.format_exc()}")
+            # Reset to MongoDB as fallback
+            print("🔄 Falling back to MongoDB...")
+            self.current_db_type = "mongodb"
+            # Update environment to use MongoDB URL
+            from app.config import settings
+            if settings.MONGODB_URL:
+                self.db = await DatabaseFactory.create_database("mongodb")
+                await DatabaseFactory.initialize_sample_data(self.db)
+            else:
+                raise Exception("MongoDB fallback also failed - no MongoDB URL configured")
 
 
     async def reinitialize_database(self, database_type: str = None):

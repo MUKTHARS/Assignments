@@ -19,7 +19,7 @@ app.add_middleware(
 )
 
 # Include API routes
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(api_router)
 
 @app.on_event("startup")
 async def startup_event():
@@ -37,12 +37,18 @@ async def root():
     return {
         "message": "Shopping Analytics API", 
         "version": "1.0.0",
-        "docs": "/docs"
+        "docs": "/docs",
+        "endpoints": {
+            "health": "/api/v1/health",
+            "query": "/api/v1/query", 
+            "switch-database": "/api/v1/switch-database",
+            "test-connection": "/api/v1/test-connection"
+        }
     }
 
 # Add health redirect to fix 404
-@app.get("/health")
-async def health_redirect():
-    """Redirect to the actual health endpoint"""
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/api/v1/health")
+# @app.get("/health")
+# async def health_redirect():
+#     """Redirect to the actual health endpoint"""
+#     from fastapi.responses import RedirectResponse
+#     return RedirectResponse(url="/api/v1/health")

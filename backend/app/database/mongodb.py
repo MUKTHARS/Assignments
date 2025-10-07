@@ -1,4 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorClient
+from urllib.parse import urlparse 
+import re
+import hashlib
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 import json
@@ -15,28 +18,65 @@ class MongoDB(DatabaseInterface):
     async def connect(self):
         try:
             self.client = AsyncIOMotorClient(self.connection_string)
-            # Extract database name from connection string
-            if "mongodb://" in self.connection_string:
-                parts = self.connection_string.split("/")
-                if len(parts) > 3:
-                    db_name = parts[-1]
-                    if "?" in db_name:
-                        db_name = db_name.split("?")[0]
-                else:
-                    db_name = "shopping_db"
-            else:
-                db_name = "shopping_db"
+            
+            # Dynamically extract database name from connection string
+            db_name = self._extract_database_name(self.connection_string)
             
             self.db = self.client[db_name]
             print(f"✅ MongoDB connected successfully to database: {db_name}")
             
-            # Verify connection
+            # Verify connection and check collections
             collections = await self.db.list_collection_names()
             print(f"📊 Available collections: {collections}")
+            
+            # Check if we need to initialize schema
+            await self._ensure_schema()
             
         except Exception as e:
             print(f"❌ Error connecting to MongoDB: {e}")
             raise
+
+    def _extract_database_name(self, connection_string: str) -> str:
+        """Dynamically extract database name from MongoDB connection string"""
+        try:
+            # Parse the connection string
+            if connection_string.startswith('mongodb+srv://'):
+                # MongoDB Atlas connection string
+                pattern = r'mongodb\+srv://[^:]+:[^@]+@[^/]+/([^?]+)'
+                match = re.search(pattern, connection_string)
+                if match:
+                    return match.group(1)
+            else:
+                # Standard MongoDB connection string
+                parsed = urlparse(connection_string)
+                if parsed.path and parsed.path != '/':
+                    db_name = parsed.path[1:]  # Remove leading slash
+                    if '?' in db_name:
+                        db_name = db_name.split('?')[0]
+                    return db_name
+            
+            # Default fallback - use connection string hash to create unique name
+            import hashlib
+            hash_obj = hashlib.md5(connection_string.encode())
+            return f"shopping_db_{hash_obj.hexdigest()[:8]}"
+            
+        except Exception as e:
+            print(f"⚠️ Could not extract database name, using default: {e}")
+            return "shopping_db"
+
+    async def _ensure_schema(self):
+        """Ensure basic schema exists, create if needed"""
+        existing_collections = await self.db.list_collection_names()
+        
+        required_collections = ['products', 'customers', 'orders', 'categories', 'reviews', 'inventory']
+        
+        for collection in required_collections:
+            if collection not in existing_collections:
+                print(f"📝 Creating collection: {collection}")
+                await self.db.create_collection(collection)
+        
+        print("✅ Schema verification completed")
+
 
     async def disconnect(self):
         if self.client:
@@ -45,7 +85,18 @@ class MongoDB(DatabaseInterface):
     async def initialize_sample_data(self):
         """Initialize comprehensive sample data for testing"""
         print("🔄 Initializing MongoDB sample data...")
+
+        # Check if data already exists
+        products_count = await self.db.products.count_documents({})
+        customers_count = await self.db.customers.count_documents({})
+        orders_count = await self.db.orders.count_documents({})
         
+        if products_count > 0 or customers_count > 0 or orders_count > 0:
+            print("ℹ️ Data already exists, skipping sample data initialization")
+            return
+        
+        print("🔄 Initializing MongoDB sample data...")
+
         # Clear existing data to ensure clean state
         try:
             await self.db.products.drop()

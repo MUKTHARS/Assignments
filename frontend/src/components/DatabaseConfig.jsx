@@ -113,7 +113,7 @@ const DatabaseConfig = ({ onConfigUpdate }) => {
             onChange={(e) => setConfig({...config, connection_url: e.target.value})}
             placeholder={
               config.database_type === 'postgres' 
-                ? 'postgresql://postgres:user@localhost:5432/shopping_db'
+                ? 'postgresql://neondb_owner:npg_KO1dq6agsTkl@ep-withered-truth-a67q0hmg-pooler.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
                 : 'mongodb://localhost:27017/shopping_db'
             }
             required

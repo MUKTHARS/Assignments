@@ -2,11 +2,14 @@ import asyncpg
 from sqlalchemy import create_engine, text, MetaData, Table, Column, Integer, String, Float, DateTime, Date, Boolean, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
+import re 
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 import pandas as pd
 import json
 import random
+import traceback 
 
 from .base import DatabaseInterface
 
@@ -16,14 +19,18 @@ class PostgresDB(DatabaseInterface):
         self.engine = None
         self.SessionLocal = None
         self.metadata = MetaData()
+        self._define_tables()
         
         # Define comprehensive tables
+    def _define_tables(self):
+        """Dynamically define table schemas"""
         self.categories = Table(
             'categories', self.metadata,
             Column('id', Integer, primary_key=True),
             Column('name', String),
             Column('description', String),
-            Column('created_at', DateTime, default=datetime.utcnow)
+            Column('created_at', DateTime, default=datetime.utcnow),
+            extend_existing=True 
         )
         
         self.products = Table(
@@ -117,28 +124,89 @@ class PostgresDB(DatabaseInterface):
 
     async def connect(self):
         try:
-            self.engine = create_engine(self.connection_string)
+            print(f"🔗 Attempting PostgreSQL connection...")
+            
+            # Test basic connection first
+            try:
+                # Try to create engine and test connection
+                self.engine = create_engine(self.connection_string)
+                
+                # Test the connection
+                with self.engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                print("✅ PostgreSQL basic connection test passed")
+                
+            except OperationalError as oe:
+                print(f"❌ PostgreSQL connection failed: {str(oe)}")
+                raise ConnectionError(f"Cannot connect to PostgreSQL: {str(oe)}")
+            
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-            self.metadata.create_all(bind=self.engine)
-            print("✅ PostgreSQL connected successfully")
+            
+            # Create tables if they don't exist
+            await self.create_tables()
+            
+            print("✅ PostgreSQL connected successfully and schema verified")
+            
         except Exception as e:
-            print(f"❌ Error connecting to PostgreSQL: {e}")
+            print(f"❌ Error connecting to PostgreSQL: {str(e)}")
+            print(f"🔍 Connection string: {self.connection_string[:50]}...")
+            print(f"🔍 Full traceback: {traceback.format_exc()}")
             raise
+
+
+    async def _ensure_schema(self):
+        """Ensure database schema exists - required by abstract base class"""
+        await self.create_tables()
 
     async def disconnect(self):
+        """Disconnect from PostgreSQL - required by abstract base class"""
         if self.engine:
             self.engine.dispose()
+            print("✅ PostgreSQL disconnected")
+
+
+    def _extract_schema_name(self, connection_string: str) -> str:
+        """Extract schema name from connection string if provided"""
+        try:
+            # Look for schema in connection string parameters
+            if 'search_path=' in connection_string:
+                match = re.search(r'search_path=([^&]+)', connection_string)
+                if match:
+                    return match.group(1)
+            return None
+        except:
+            return None
 
     async def create_tables(self):
-        """Create all tables if they don't exist"""
+        """Create tables only if they don't exist with better error handling"""
         try:
-            self.metadata.create_all(bind=self.engine)
-            print("✅ PostgreSQL tables created successfully")
+            print("🔍 Checking PostgreSQL schema...")
+            
+            with self.engine.begin() as conn:
+                # Check if tables already exist
+                result = conn.execute(text("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    AND table_name IN ('products', 'customers', 'orders', 'categories', 'reviews', 'inventory', 'order_items')
+                """))
+                existing_tables = [row[0] for row in result]
+                
+                required_tables = ['products', 'customers', 'orders', 'categories', 'reviews', 'inventory', 'order_items']
+                missing_tables = [table for table in required_tables if table not in existing_tables]
+                
+                if missing_tables:
+                    print(f"📝 Creating missing tables: {missing_tables}")
+                    self.metadata.create_all(bind=self.engine, checkfirst=True)
+                    print("✅ PostgreSQL tables created successfully")
+                else:
+                    print("✅ All required tables already exist")
+                    
         except Exception as e:
-            print(f"❌ Error creating tables: {e}")
-            raise
+            print(f"❌ Error creating PostgreSQL tables: {str(e)}")
+            print(f"🔍 Full traceback: {traceback.format_exc()}")
 
-    async def initialize_sample_data(self):
+    # async def initialize_sample_data(self):
         """Initialize comprehensive sample data for testing"""
         with self.engine.begin() as conn:
             # Check if data already exists
@@ -394,7 +462,7 @@ class PostgresDB(DatabaseInterface):
                             }
                         )
                         review_id += 1
-            
+            base_date = date(2025, 7, 1)
             # Insert comprehensive orders and order items
             for i in range(1, 51):  # 50 orders for more data
                 order_date = (base_date + timedelta(days=days_offset)).isoformat
@@ -420,10 +488,10 @@ class PostgresDB(DatabaseInterface):
                     {
                         "customer_id": customer_id,
                         "order_date": order_date,
-                        "total_amount": 0,  # Will update
-                        "tax_amount": 0,    # Will update
-                        "shipping_cost": 0, # Will update
-                        "final_amount": 0,  # Will update
+                        "total_amount": 0,  
+                        "tax_amount": 0,    
+                        "shipping_cost": 0, 
+                        "final_amount": 0,  
                         "status": status,
                         "shipping_address": f"{random.randint(100, 999)} {random.choice(['Main', 'Oak', 'Pine', 'Maple'])} St",
                         "shipping_city": random.choice(["New York", "Los Angeles", "Chicago", "Houston", "Phoenix"]),
